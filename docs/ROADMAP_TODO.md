@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 0 (Planning & Architecture Setup) - **COMPLETED**  
-> **Next Recommended Phase**: Phase 1 (Foundation & Docker Environment)
+> **Current Phase**: Phase 1 (Foundation & Docker Environment) - **COMPLETED**  
+> **Next Recommended Phase**: Phase 2 (Search MVP & Local Corpus)
 
 ---
 
@@ -16,15 +16,16 @@
 
 ---
 
-### [ ] Phase 1: Foundation (Next Phase)
-- [ ] Initialize FastAPI backend skeleton with basic health check endpoint (`/health`).
-- [ ] Initialize React + TypeScript + Tailwind CSS project in `frontend/`.
-- [ ] Create Dockerfile for backend (`docker/Dockerfile.backend`) and frontend (`docker/Dockerfile.frontend`).
-- [ ] Validate Docker Compose local service orchestration (Frontend + Backend + PostgreSQL).
+### [x] Phase 1: Foundation Setup & Docker Stack (COMPLETED)
+- [x] Initialize FastAPI backend skeleton with health check (`GET /health`) & meta (`GET /`) endpoints.
+- [x] Initialize React + TypeScript + Vite + Tailwind CSS project in `frontend/`.
+- [x] Implement backend health indicator in UI (Connected / Disconnected) with graceful error handling.
+- [x] Create Dockerfile for backend (`docker/Dockerfile.backend`) and frontend (`docker/Dockerfile.frontend`).
+- [x] Validate Docker Compose local service orchestration (`docker-compose.yml`).
 
 ---
 
-### [ ] Phase 2: Search MVP (Local Corpus)
+### [ ] Phase 2: Search MVP (Local Corpus) (Next Phase)
 - [ ] Create initial local text document corpus in `data/sample_corpus/`.
 - [ ] Setup PostgreSQL database models using SQLAlchemy/Alembic.
 - [ ] Implement initial BM25 lexical index builder in `backend/search/`.

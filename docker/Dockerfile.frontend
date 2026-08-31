@@ -1,0 +1,52 @@
+# ==========================================
+# Stage 1: Build Frontend Assets
+# ==========================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package.json ./
+
+RUN npm install --no-fund --no-audit
+
+COPY . .
+
+RUN node node_modules/vite/bin/vite.js build
+
+# ==========================================
+# Stage 2: Serve Web App via Nginx
+# ==========================================
+FROM nginx:1.25-alpine
+
+# Copy custom Nginx configuration
+COPY <<EOF /etc/nginx/conf.d/default.conf
+server {
+    listen 3000;
+    server_name localhost;
+
+    location / {
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    # Proxy API calls directly to FastAPI backend service inside Docker network
+    location /api/ {
+        proxy_pass http://backend:8000/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+# Copy static build output from builder stage
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=15s --timeout=5s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
+
+CMD ["nginx", "-g", "daemon off;"]
