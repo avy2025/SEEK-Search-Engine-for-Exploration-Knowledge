@@ -1,6 +1,6 @@
 # SEEK – Search Engine
 ## Software Requirements Specification
-**Version 2.0 | Elaborated Technical Specification | August 2026**
+**Version 2.1 | Elaborated Technical Specification | August 2026**
 
 ---
 
@@ -285,3 +285,11 @@ The weights are configurable and will be tuned experimentally using a small rele
 - **Phase 12 – Cloud**: Deploy only after local stability using eligible free resources.
 - **Phase 13 – Evaluation**: Measure relevance, latency, crawl throughput and resource usage.
 - **Phase 14 – Documentation**: README, setup guide, architecture, API documentation and demonstration.
+
+> **Implementation Status (Phase 2 complete)**: Phases 0–2 are implemented.
+> Phase 2 shipped the local corpus (`data/sample_corpus/`), SQLAlchemy document
+> models, BM25 lexical retrieval in `backend/search/`, the processing pipeline
+> in `backend/` (`backend/processing`, `backend/pipeline.py`), the
+> `GET /api/search` endpoint, a search UI in `frontend/`, and a Phase 2 test
+> suite (`tests/test_search_phase2.py`). Subsequent phases remain roadmap
+> backlog.
