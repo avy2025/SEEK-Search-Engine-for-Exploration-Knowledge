@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 1 (Foundation & Docker Environment) - **COMPLETED**  
-> **Next Recommended Phase**: Phase 2 (Search MVP & Local Corpus)
+> **Current Phase**: Phase 2 (Search MVP & Local Corpus) - **COMPLETED**  
+> **Next Recommended Phase**: Phase 3 (UI Implementation)
 
 ---
 
@@ -25,11 +25,11 @@
 
 ---
 
-### [ ] Phase 2: Search MVP (Local Corpus) (Next Phase)
-- [ ] Create initial local text document corpus in `data/sample_corpus/`.
-- [ ] Setup PostgreSQL database models using SQLAlchemy/Alembic.
-- [ ] Implement initial BM25 lexical index builder in `backend/search/`.
-- [ ] Implement `/api/search` endpoint returning preliminary JSON search results.
+### [x] Phase 2: Search MVP (Local Corpus) (COMPLETED)
+- [x] Create initial local text document corpus in `data/sample_corpus/`.
+- [x] Setup PostgreSQL database models using SQLAlchemy/Alembic.
+- [x] Implement initial BM25 lexical index builder in `backend/search/`.
+- [x] Implement `/api/search` endpoint returning preliminary JSON search results.
 
 ---
 
