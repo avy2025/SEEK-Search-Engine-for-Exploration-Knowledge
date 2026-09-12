@@ -69,6 +69,12 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
   - `POST /api/index/rebuild`: Administrative endpoint to rebuild inverted/vector indexes.
   - `POST /api/answer`: Generate RAG answer based on retrieved documents.
 
+> **Implemented (Phase 2)**: `GET /health`, `GET /` (service meta), and
+> `GET /api/search` are live and exercised end-to-end by the acceptance probe
+> (`scripts/probe_phase2.py`) and the Phase 2 test suite
+> (`tests/test_search_phase2.py`). Crawl, rebuild, and answer endpoints are
+> roadmap backlog.
+
 ### 3.3 Content & Crawler Pipeline (`backend/crawler/`, `backend/processor/`)
 - **Tools**: `httpx`, `asyncio`, `BeautifulSoup4`, `trafilatura`
 - **Flow**:
@@ -81,6 +87,11 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 ### 3.4 Retrieval Layer (`backend/search/`)
 - **Lexical Baseline**: BM25 algorithm (`rank-bm25`) indexing title, headers, and text chunks.
 - **Semantic Engine**: `SentenceTransformers` (`all-MiniLM-L6-v2`) generating text embeddings, indexed in `FAISS` or `ChromaDB`.
+
+> **Implemented (Phase 2)**: lexical retrieval is live via
+> `backend/processing/` (tokenizer, loader, snippets) -> `backend/pipeline.py`
+> (corpus -> `backend/search/engine.py`) -> `GET /api/search`. Semantic/hybrid
+> retrieval (Phase 6/7) is roadmap backlog.
 
 ### 3.5 Ranking Engine (`backend/ranking/`)
 - Combines candidate sets using a weighted hybrid score:
