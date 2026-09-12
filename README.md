@@ -3,6 +3,7 @@
 > A Genuine, Modular, Docker-First Search Engine with Controlled Crawling, Lexical & Semantic Retrieval, Hybrid Ranking, and Optional RAG Synthesis.
 
 [![Phase 1: Foundation Ready](https://img.shields.io/badge/Phase%201-Completed-brightgreen.svg)]()
+[![Phase 2: Search MVP](https://img.shields.io/badge/Phase%202-Completed-brightgreen.svg)]()
 [![Stack: FastAPI + React + Docker](https://img.shields.io/badge/Stack-FastAPI%20%7C%20React%20%7C%20Docker-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
@@ -18,8 +19,8 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## 🚦 Current Project Status
 
-- **Current Phase**: **Phase 1 — Foundation & Docker Infrastructure** `[COMPLETED]`
-- **Next Phase**: **Phase 2 — Search MVP (Local Corpus)** `[UPCOMING]`
+- **Current Phase**: **Phase 2 — Search MVP (Local Corpus + BM25)** `[COMPLETED]`
+- **Next Phase**: **Phase 3 — Controlled Crawling & Document Ingestion** `[UPCOMING]`
 
 ---
 
@@ -47,40 +48,84 @@ The current codebase establishes a production-grade full-stack foundation:
 
 ---
 
+## ✅ PHASE 2 COMPLETE FEATURES (Search MVP)
+
+Phase 2 turns the Phase 1 shell into a working **lexical search engine** over a
+committed sample corpus. Everything is zero-cost and runs without paid APIs:
+
+1. **Local Sample Corpus** (`data/sample_corpus/`):
+   - 10 Markdown documents covering Docker, Python, Machine Learning, NLP, Odoo,
+     Databases, Containerization and more (tracked in the repo, deterministic build).
+
+2. **Deterministic Processing Pipeline** (`backend/processing/`):
+   - `tokenizer.py` — unicode-normalising tokeniser with a stable stop-word set.
+   - `loader.py` — reads the corpus (front-matter aware, fixed file order).
+   - `snippets.py` — keyword-aware, deterministic excerpt builder.
+
+3. **In-Memory BM25 Index** (`backend/search/`):
+   - `bm25.py` — Okapi-BM25 (k1=1.5, b=0.75) over tokenised documents via `rank-bm25`.
+   - `query.py` — query-side normalisation + weighted tokens.
+   - `engine.py` — `SearchEngine`: index the corpus once, rank & snippet per query.
+
+4. **Optional Persistence (`backend/db/`)**:
+   - SQLAlchemy models/session/repository with graceful degradation when Postgres is down.
+   - `pipeline.py` orchestrates corpus → index with best-effort persistence.
+
+5. **Search API (`GET /api/search`)**:
+   - Returns `{query, total, limit, hits[], took_ms, message}` — ranked, snipped,
+     source-tagged results. Accessible via [http://localhost:8000/api/search?q=docker](http://localhost:8000/api/search?q=docker).
+
+6. **Real Search UI** (React frontend):
+   - Live BM25 search against the FastAPI backend with loading / empty / error states,
+     ranked cards with keyword excerpts, matched-term chips, and the existing health panel.
+
+7. **Tests** — `tests/test_search_phase2.py` (20 tests total incl. Phase 1):
+   - Verifies corpus loading, tokenisation, snippets, BM25 ranking, pipeline and the live API.
+
+---
+
 ## ❌ NOT YET IMPLEMENTED
 
 To keep the development scope clean and strictly phase-aligned, the following components are **NOT** yet implemented:
 
-- ❌ Web Crawler (Async crawling, domain allowlisting, and `robots.txt` parsing - Phase 4)
+- ❌ Web Crawler (Async crawling, domain allowlisting, and `robots.txt` parsing - Phase 3/4)
 - ❌ Document Extractor & Text Chunking (Phase 4)
-- ❌ BM25 Lexical Inverted Index (Phase 2 & Phase 5)
 - ❌ FAISS Vector Indexing & Local Embeddings (Phase 6)
 - ❌ Multi-Signal Hybrid Ranker (Phase 7)
 - ❌ AI / RAG Answer Generation (Phase 8)
-- ❌ Real Search Query Processing (Search button currently displays Phase 1 status notice - Phase 2+)
 
 ---
 
 ## 🏗️ System Architecture
 
 ```
-                                  +---------------------------------------+
-                                  |         React + Vite UI               |
-                                  |      (Port 3000 / Nginx Container)    |
-                                  +-------------------+-------------------+
-                                                      |
-                                                      |  HTTP / REST
-                                                      v
-                                  +---------------------------------------+
-                                  |          FastAPI Gateway              |
-                                  |     (Port 8000 / Uvicorn Container)   |
-                                  +---------+-----------------+-----------+
-                                            |                 |
-                                            v                 v
-                                   +----------------+ +------------------+
-                                   |  GET /health   | |      GET /       |
-                                   | (Health Check) | | (System Meta)    |
-                                   +----------------+ +------------------+
+                                   +---------------------------------------+
+                                   |         React + Vite UI (Phase 2)     |
+                                   |      Search box + ranked results      |
+                                   |      (Port 3000 / Nginx Container)    |
+                                   +-------------------+-------------------+
+                                                       |
+                                                       |  HTTP / REST
+                                                       v
+                                   +---------------------------------------+
+                                   |          FastAPI Gateway              |
+                                   |     (Port 8000 / Uvicorn Container)   |
+                                   +---------+-----------------+-----------+
+                                             |                 |
+                                             v                 v
+                                    +----------------+ +------------------+
+                                    |  GET /health   | |  GET /           |
+                                    | (Health Check) | | (System Meta)    |
+                                    +----------------+ +------------------+
+                                             |
+                                             v
+                                   +-----------------------------------------+
+                                   |   GET /api/search  (Phase 2: BM25)      |
+                                   |   engine.search -> rank + snippets      |
+                                   +-------------------+---------------------+
+                                                       |
+                                       in-memory Okapi-BM25 index
+                                       + optional best-effort Postgres
 ```
 
 ---
@@ -181,15 +226,21 @@ To verify that the Phase 1 backend service and health checks are functioning cor
    }
    ```
 
+3. **Phase 2 Search Smoke Test**:
+   ```bash
+   curl -s "http://localhost:8000/api/search?q=docker&limit=3" | python -m json.tool
+   ```
+   Expected: a `200` with `hits[]` — each hit holding `rank`, `title`, `source`,
+   `snippet`, `score`, and `matched_terms` (ranked BM25 results from the corpus).
+
 ---
 
 ## 🔮 Next Planned Phase
 
-**Phase 2: Search MVP (Local Corpus)**
-- Populate local sample document collection in `data/sample_corpus/`.
-- Setup SQLAlchemy models and database migrations.
-- Implement initial BM25 keyword indexer.
-- Expose `/api/search` endpoint returning JSON candidate results.
+**Phase 3: Controlled Crawling & Document Ingestion**
+- Async crawler with domain allowlisting and `robots.txt` parsing.
+- Document extractor (HTML parsing, metadata) and text chunking.
+- Extend the persisted document store + index beyond the sample corpus.
 
 ---
 
