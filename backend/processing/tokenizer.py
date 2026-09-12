@@ -11,8 +11,8 @@ Two export levels, matching the probe/acceptance contract + the loader's use:
 * :func:`tokenize` — ``normalize`` then split on non-alphanumeric runs, dropping
   a small explicit English stop-word set. This is the token stream BM25 sees.
 * :data:`STOPWORDS` — the explicit, stable stop-word set.
-* :data:`TOKEN_RE` — compiled ``\w``-based token matcher (kept for callers that
-  want the split pattern itself).
+* :data:`TOKEN_RE` — compiled ``\\w``-based token matcher (kept for callers
+  that want the split pattern itself).
 """
 from __future__ import annotations
 
