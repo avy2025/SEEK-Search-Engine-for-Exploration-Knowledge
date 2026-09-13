@@ -22,6 +22,19 @@ class Settings(BaseSettings):
     SNIPPET_SURROUNDING_WORDS: int = 12
     CACHE_ONLY: bool = True
 
+    # --- Phase 4 Controlled Web Crawler ---
+    CRAWLER_ALLOWED_DOMAINS: str = ""
+    CRAWLER_MAX_DEPTH: int = 2
+    CRAWLER_MAX_PAGES: int = 25
+    CRAWLER_CONCURRENT_REQUESTS: int = 1
+    CRAWLER_DELAY_SECONDS: float = 1.0
+    CRAWLER_TIMEOUT_SECONDS: float = 10.0
+    CRAWLER_MAX_REDIRECTS: int = 5
+    CRAWLER_MAX_CONTENT_CHARS: int = 200_000
+    CRAWLER_USER_AGENT: str = "SEEK-Crawler/1.0 (+http://localhost:3000/bot-info)"
+    CRAWLER_RESPECT_ROBOTS: bool = True
+    CRAWLER_BLOCK_PRIVATE_HOSTS: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

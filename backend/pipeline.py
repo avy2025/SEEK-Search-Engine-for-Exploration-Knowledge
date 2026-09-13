@@ -53,14 +53,22 @@ class PipelineReport:
     message: str = ""
 
 
-def build_pipeline() -> SearchEngine:
+def build_pipeline(
+    extra: Optional[list[ProcessedDocument]] = None,
+) -> SearchEngine:
     """Load the corpus and return an indexed :class:`SearchEngine`.
 
-    The engine always lands (in-memory BM25); persistence is attempted
-    best-effort and failures are swallowed. PostgreSQL availability is never a
-    precondition for returning a useful search engine.
+    *extra* may carry additional :class:`ProcessedDocument` values (e.g. from
+    the Phase 4 crawler) that are appended to the committed corpus before
+    indexing. The engine always lands (in-memory BM25); persistence is
+    attempted best-effort and failures are swallowed. PostgreSQL availability is
+    never a precondition for returning a useful search engine.
     """
     processed = load_corpus()
+    if extra:
+        processed = processed + [
+            d for d in extra if d is not None and d.content and d.tokens
+        ]
     engine = SearchEngine()
     engine.index_documents(processed)
     return engine

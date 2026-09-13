@@ -9,6 +9,7 @@ Phase 2 registers this router only when the app imports it from ``main.py``.
 """
 from __future__ import annotations
 
+import threading
 import time
 from typing import Optional
 
@@ -23,13 +24,23 @@ router: APIRouter = APIRouter(prefix="/api/search", tags=["search"])
 # Process-wide singleton; initialised lazily on first request so the probe/app
 # build never need a live corpus or database to import the route table.
 _engine: Optional[SearchEngine] = None
+_engine_lock: threading.Lock = threading.Lock()
 
 
 def _get_engine() -> SearchEngine:
     global _engine
-    if _engine is None:
-        _engine = build_pipeline()
-    return _engine
+    with _engine_lock:
+        if _engine is None:
+            _engine = build_pipeline()
+        return _engine
+
+
+def set_engine(engine: SearchEngine) -> None:
+    """Swap the live engine (used by ``/api/index/rebuild`` to fold in crawled
+    documents without disturbing concurrent searches)."""
+    global _engine
+    with _engine_lock:
+        _engine = engine
 
 
 @router.get("", name="search")
@@ -62,4 +73,4 @@ def search_documents(
     }
 
 
-__all__ = ["router", "search_documents", "_get_engine"]
+__all__ = ["router", "search_documents", "_get_engine", "set_engine"]
