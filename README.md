@@ -4,6 +4,7 @@
 
 [![Phase 1: Foundation Ready](https://img.shields.io/badge/Phase%201-Completed-brightgreen.svg)]()
 [![Phase 2: Search MVP](https://img.shields.io/badge/Phase%202-Completed-brightgreen.svg)]()
+[![Phase 4: Crawler](https://img.shields.io/badge/Phase%204-Controlled%20Crawler-Completed-brightgreen.svg)]()
 [![Stack: FastAPI + React + Docker](https://img.shields.io/badge/Stack-FastAPI%20%7C%20React%20%7C%20Docker-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
@@ -19,8 +20,8 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## 🚦 Current Project Status
 
-- **Current Phase**: **Phase 2 — Search MVP (Local Corpus + BM25)** `[COMPLETED]`
-- **Next Phase**: **Phase 3 — Controlled Crawling & Document Ingestion** `[UPCOMING]`
+- **Current Phase**: **Phase 4 — Controlled Web Crawler & Document Ingestion** `[COMPLETED]`
+- **Next Phase**: **Phase 3 — Search UI polish / in-progress UI work** `[UPCOMING]`
 
 ---
 
@@ -84,12 +85,56 @@ committed sample corpus. Everything is zero-cost and runs without paid APIs:
 
 ---
 
+## ✅ PHASE 4 COMPLETE FEATURES (Controlled Web Crawler)
+
+Phase 4 adds a **domain-controlled, robots-respecting asynchronous crawler**
+(`backend/crawler/`) whose output feeds straight into the existing BM25
+pipeline — crawled pages become searchable through the same `/api/search`
+endpoint:
+
+1. **Async Crawler** (`backend/crawler/scheduler.py`):
+   - BFS frontier crawl with configurable `max_pages`, `max_depth`, per-host
+     `delay_seconds` and concurrency, all bounded and safe to run in-process.
+
+2. **Responsible Crawling**:
+   - URLs normalized (lowercase scheme/host, default ports dropped, tracking
+     params and fragments stripped) and deduplicated by URL **and** content hash.
+   - `robots.txt` parsing (`urllib.robotparser`) with per-host caching,
+     `Crawl-delay` enforcement, and HTTP 401/403 → block-all semantics.
+   - Dangerous URLs rejected (`javascript:`, `data:`, `ftp:`, credentials,
+     `localhost`/private IPs by default, binary/PDF paths, `mailto:`, `tel:`).
+
+3. **Extraction & Chunking** (`backend/crawler/extract.py`):
+   - BeautifulSoup: main-text extraction (strips `nav`/`script`/`style`/
+     `header`/`footer`), title fallback to `h1`/hostname, SHA-256 content hashes,
+     non-overlapping text chunks for future RAG.
+
+4. **Crawl Jobs API** (`backend/api/crawl.py`):
+   - `POST /api/crawl` — start a job `{urls[], allowed_domains[], max_pages,
+     max_depth, delay_seconds, ...}` → `{job_id, status}` (202-style async).
+   - `GET /api/crawl` — list jobs; `GET /api/crawl/{job_id}` — poll status
+     (`pending/running/completed/failed` + `pages_crawled`, failures, report).
+
+5. **Index Management** (`backend/api/index.py`):
+   - `POST /api/index/rebuild` — rebuild the live BM25 engine over corpus
+     **+ crawled pages**, hot-swapping the engine so in-flight searches are
+     never disturbed.
+
+6. **Dedup & Persistence** (`backend/crawler/service.py`):
+   - Thread-safe `CrawlStore` (visited URLs + content hashes) and a background
+     `CrawlManager` for job orchestration; crawled docs persisted best-effort
+     to Postgres and exposed as `crawl-*` document IDs in search results.
+
+7. **Zero external network per test** — a tiny in-process `http.server` fixture
+   serves a deterministic site (robots.txt, PDF, 404, out-of-scope links) so
+   the whole suite runs offline. **45 tests total** pass.
+
+---
+
 ## ❌ NOT YET IMPLEMENTED
 
 To keep the development scope clean and strictly phase-aligned, the following components are **NOT** yet implemented:
 
-- ❌ Web Crawler (Async crawling, domain allowlisting, and `robots.txt` parsing - Phase 3/4)
-- ❌ Document Extractor & Text Chunking (Phase 4)
 - ❌ FAISS Vector Indexing & Local Embeddings (Phase 6)
 - ❌ Multi-Signal Hybrid Ranker (Phase 7)
 - ❌ AI / RAG Answer Generation (Phase 8)
@@ -104,9 +149,9 @@ To keep the development scope clean and strictly phase-aligned, the following co
                                    |      Search box + ranked results      |
                                    |      (Port 3000 / Nginx Container)    |
                                    +-------------------+-------------------+
-                                                       |
-                                                       |  HTTP / REST
-                                                       v
+                                                        |
+                                                        |  HTTP / REST
+                                                        v
                                    +---------------------------------------+
                                    |          FastAPI Gateway              |
                                    |     (Port 8000 / Uvicorn Container)   |
@@ -119,13 +164,19 @@ To keep the development scope clean and strictly phase-aligned, the following co
                                     +----------------+ +------------------+
                                              |
                                              v
-                                   +-----------------------------------------+
-                                   |   GET /api/search  (Phase 2: BM25)      |
-                                   |   engine.search -> rank + snippets      |
-                                   +-------------------+---------------------+
-                                                       |
-                                       in-memory Okapi-BM25 index
-                                       + optional best-effort Postgres
+                          +--------------------------------------------+
+                          |  /api/search  (BM25)  /api/crawl (jobs)   |
+                          |  /api/index/rebuild (corpus + crawled)    |
+                          +-------------------+------------------------+
+                                              |
+                          +-------------------+--------------------+
+                          |                                          |
+                          v                                          v
+          +---------------------------------+             +-----------------------+
+          |  Crawler pipeline (Phase 4)     |------\     |  In-memory BM25 index |
+          |  seeds -> robots -> fetch ->    |       \    |  corpus + crawl-* docs |
+          |  extract -> chunk -> dedup      |        \   |  + best-effort Postgres|
+          +---------------------------------+         \  +-----------------------+
 ```
 
 ---
@@ -136,6 +187,7 @@ To keep the development scope clean and strictly phase-aligned, the following co
 |---|---|---|
 | **Frontend UI** | React 18, TypeScript, Vite, Tailwind CSS | Responsive web search interface |
 | **API Backend** | Python 3.11, FastAPI, Uvicorn, Pydantic v2 | High-performance async REST backend |
+| **Crawler** | httpx, asyncio, BeautifulSoup4, robotparser | Controlled async crawling + extraction |
 | **Database** | PostgreSQL 16 Alpine | Persistent metadata and crawl queue storage |
 | **Containerization** | Docker, Docker Compose, Nginx | Reproducible containerized stack |
 | **Testing** | Pytest, TestClient, Httpx | Automated integration and unit testing |
@@ -189,7 +241,7 @@ To keep the development scope clean and strictly phase-aligned, the following co
 pip install -r requirements.txt
 
 # Run pytest test suite
-python -m pytest tests/
+python -m pytest -q
 
 # Run FastAPI backend with Uvicorn
 python backend/main.py
@@ -233,14 +285,31 @@ To verify that the Phase 1 backend service and health checks are functioning cor
    Expected: a `200` with `hits[]` — each hit holding `rank`, `title`, `source`,
    `snippet`, `score`, and `matched_terms` (ranked BM25 results from the corpus).
 
+4. **Phase 4 Crawl Smoke Test** (network required — crawls `https://example.com`):
+   ```bash
+   # Start a crawl job (async)
+   curl -s -X POST http://localhost:8000/api/crawl \
+     -H "content-type: application/json" \
+     -d '{"urls":["https://example.com"], "max_pages": 3, "max_depth": 1}'
+   # Poll it
+   curl -s http://localhost:8000/api/crawl/<job_id>
+   ```
+   Expected: the job transitions `running → completed` with `pages_crawled`
+   reflecting the page cap, then `robots_blocked`/`out_of_scope` counters.
+
+5. **Rebuild & Search Crawled Content**:
+   ```bash
+   curl -s -X POST http://localhost:8000/api/index/rebuild
+   curl -s "http://localhost:8000/api/search?q=<term>&limit=3" | python -m json.tool
+   ```
+   Expected: `crawled_documents >= 1` after a successful crawl; search now ranks
+   `crawl-*` documents alongside the local corpus.
+
 ---
 
 ## 🔮 Next Planned Phase
 
-**Phase 3: Controlled Crawling & Document Ingestion**
-- Async crawler with domain allowlisting and `robots.txt` parsing.
-- Document extractor (HTML parsing, metadata) and text chunking.
-- Extend the persisted document store + index beyond the sample corpus.
+**Phase 3: Search UI polish** (the crawler milestone is delivered; UI work resumes here)
 
 ---
 

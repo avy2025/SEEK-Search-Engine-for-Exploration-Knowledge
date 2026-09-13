@@ -1,6 +1,6 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 2 (Search MVP & Local Corpus) - **COMPLETED**  
+> **Current Phase**: Phase 4 (Controlled Web Crawler) - **COMPLETED**  
 > **Next Recommended Phase**: Phase 3 (UI Implementation)
 
 ---
@@ -41,16 +41,20 @@
 
 ---
 
-### [ ] Phase 4: Controlled Web Crawler
-- [ ] Build async crawler module (`backend/crawler/`) using `httpx` and `asyncio`.
-- [ ] Implement domain allowlist validator and `robots.txt` rule parser.
-- [ ] Implement HTML content parser (`trafilatura` / `BeautifulSoup`) to extract main text body.
-- [ ] Implement text chunking and document hash deduplication.
+### [x] Phase 4: Controlled Web Crawler (COMPLETED)
+- [x] Build async crawler module (`backend/crawler/`) using `httpx` and `asyncio`.
+- [x] Implement URL normalization/scoping and dedup (URL + content hash).
+- [x] Implement domain allowlist validator and `robots.txt` rule parser.
+- [x] Implement HTML content parser (`BeautifulSoup`) to extract main text body.
+- [x] Implement text chunking and document hash deduplication.
+- [x] Expose crawl job API (`POST /api/crawl`, `GET /api/crawl`, `GET /api/crawl/{job_id}`).
+- [x] Fold crawled pages into the BM25 index (`POST /api/index/rebuild`).
+- [x] Crawler test suite (offline fixture) — 45 tests total across all phases.
 
 ---
 
 ### [ ] Phase 5: Persistent Indexing Pipeline
-- [ ] Wire crawler output directly to PostgreSQL document storage.
+- [ ] Wire crawler output directly to PostgreSQL document storage (currently best-effort).
 - [ ] Create incremental and full index rebuild routines (`/api/index/rebuild`).
 - [ ] Persist BM25 index to `indexes/` directory.
 

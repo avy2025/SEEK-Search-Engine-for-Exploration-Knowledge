@@ -69,20 +69,33 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
   - `POST /api/index/rebuild`: Administrative endpoint to rebuild inverted/vector indexes.
   - `POST /api/answer`: Generate RAG answer based on retrieved documents.
 
-> **Implemented (Phase 2)**: `GET /health`, `GET /` (service meta), and
-> `GET /api/search` are live and exercised end-to-end by the acceptance probe
-> (`scripts/probe_phase2.py`) and the Phase 2 test suite
-> (`tests/test_search_phase2.py`). Crawl, rebuild, and answer endpoints are
-> roadmap backlog.
+> **Implemented (Phase 4)**: `GET /health`, `GET /` (service meta),
+> `GET /api/search`, `POST /api/crawl`, `GET /api/crawl`,
+> `GET /api/crawl/{job_id}` and `POST /api/index/rebuild` are live and exercised
+> end-to-end by the acceptance probe (`scripts/probe_phase2.py`) and the test
+> suites (`tests/test_search_phase2.py`, `tests/test_crawler_phase4.py`).
+> `POST /api/answer` (RAG) remains roadmap backlog.
 
-### 3.3 Content & Crawler Pipeline (`backend/crawler/`, `backend/processor/`)
-- **Tools**: `httpx`, `asyncio`, `BeautifulSoup4`, `trafilatura`
+### 3.3 Content & Crawler Pipeline (`backend/crawler/`, `backend/processing/`)
+- **Tools**: `httpx`, `asyncio`, `BeautifulSoup4`, `urllib.robotparser`
 - **Flow**:
-  1. Validate target seed domain against configured allowlist.
-  2. Parse `robots.txt` and obey crawl-delay / exclusions.
-  3. Fetch HTML content asynchronously with timeout/retry handlers.
-  4. Extract clean textual content, removing script tags, ads, and navigation clutter.
-  5. Chunk text into fine-grained segments for retrieval and store hashes in PostgreSQL.
+  1. Normalize/validate each seed URL against the configured allowlist and
+     reject dangerous URLs (non-http schemes, credentials, private hosts,
+     binary/PDF paths).
+  2. Parse `robots.txt` (per-host cache) and obey crawl-delay / exclusions;
+     HTTP 401/403 robots responses block broadly.
+  3. Fetch HTML content asynchronously with timeout, redirect and size caps.
+  4. Extract clean textual content with BeautifulSoup, removing scripts, ads,
+     navigation and header/footer clutter.
+  5. Chunk text into fine-grained segments, compute SHA-256 content hashes,
+     dedupe by URL and content, and fold results into the BM25 index via
+     `POST /api/index/rebuild`.
+
+> **Implemented (Phase 4)**: the crawler (`backend/crawler/`) is live via the
+> `backend/api/crawl.py` router (async jobs, `CrawlManager` background threads,
+> `CrawlStore` in-process dedup) plus `backend/api/index.py` to rebuild the
+> search engine over corpus + crawled pages. Trafilatura remains an optional
+> upgrade; BeautifulSoup is the active extractor.
 
 ### 3.4 Retrieval Layer (`backend/search/`)
 - **Lexical Baseline**: BM25 algorithm (`rank-bm25`) indexing title, headers, and text chunks.
@@ -90,8 +103,8 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 
 > **Implemented (Phase 2)**: lexical retrieval is live via
 > `backend/processing/` (tokenizer, loader, snippets) -> `backend/pipeline.py`
-> (corpus -> `backend/search/engine.py`) -> `GET /api/search`. Semantic/hybrid
-> retrieval (Phase 6/7) is roadmap backlog.
+> (corpus + crawled pages -> `backend/search/engine.py`) -> `GET /api/search`.
+> Semantic/hybrid retrieval (Phase 6/7) is roadmap backlog.
 
 ### 3.5 Ranking Engine (`backend/ranking/`)
 - Combines candidate sets using a weighted hybrid score:
