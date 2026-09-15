@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -47,6 +47,17 @@ class DocumentRepository:
     def session(self) -> Optional[Session]:
         return self._session
 
+    def is_available(self) -> bool:
+        """True when the underlying database answers a trivial query."""
+        if self._session is None:
+            return False
+        try:
+            self._session.execute(text("SELECT 1"))
+            return True
+        except Exception as exc:  # noqa: BLE001 - degraded path is intentional
+            logger.debug("Database availability check failed: %s", exc)
+            return False
+
     def upsert(self, document: Document) -> bool:
         """Insert *document* (dedup by ``content_hash``); never raises."""
         if self._session is None:
@@ -57,6 +68,7 @@ class DocumentRepository:
                 return False
             self._session.add(document)
             self._session.flush()
+            self._session.commit()
             return True
         except SQLAlchemyError as exc:  # pragma: no cover - depends on live DB
             logger.warning("upsert skipped: %s", exc)
