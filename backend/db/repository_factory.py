@@ -33,7 +33,10 @@ def _attempt_repository(database_url: Optional[str] = None) -> Optional[Document
         if database_url is None:
             database_url = settings.DATABASE_URL
         database = Database(database_url)
-        repo = make_document_repository(database)
+        if not database.is_available():
+            logger.debug("Database unavailable; returning degraded repository.")
+            return None
+        repo = make_document_repository(database.session_factory())
         if repo.is_available():
             return repo
         logger.info("Database available; returning degraded repository.")
