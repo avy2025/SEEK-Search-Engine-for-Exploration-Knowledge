@@ -33,6 +33,10 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/build/
+# The generic `lib/` rule above would swallow the frontend's source lib dir;
+# keep frontend/src/lib/ tracked while ignoring stray Python `lib/` folders.
+!frontend/src/lib/
+!frontend/src/lib/**
 .npm
 .eslintcache
 

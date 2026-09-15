@@ -286,16 +286,18 @@ The weights are configurable and will be tuned experimentally using a small rele
 - **Phase 13 – Evaluation**: Measure relevance, latency, crawl throughput and resource usage.
 - **Phase 14 – Documentation**: README, setup guide, architecture, API documentation and demonstration.
 
-> **Implementation Status (Phase 4 complete, crawler milestone)**: Phases 0, 1,
-> 2 and 4 are implemented. Phase 2 shipped the local corpus
-> (`data/sample_corpus/`), SQLAlchemy document models, BM25 lexical retrieval in
-> `backend/search/`, the processing pipeline in `backend/` (`backend/processing`,
-> `backend/pipeline.py`), the `GET /api/search` endpoint, a search UI in
-> `frontend/`, and a Phase 2 test suite (`tests/test_search_phase2.py`).
+> **Implementation Status (Phases 1–4 complete)**: Phases 0–4 are implemented
+> (Phase 3 complete). Phase 2 shipped the local corpus (`data/sample_corpus/`),
+> SQLAlchemy document models, BM25 lexical retrieval in `backend/search/`, the
+> processing pipeline in `backend/` (`backend/processing`, `backend/pipeline.py`)
+> and the `GET /api/search` endpoint. Phase 3 delivered the polished SEEK search
+> UI in `frontend/` (landing + real results + loading/empty/error states,
+> `/?q=…` URL sync, configurable `VITE_API_BASE_URL` client, health polling).
 > Phase 4 delivered the controlled async crawler (`backend/crawler/`: URL
 > normalization/scoping, robots.txt + crawl-delay, HTTP fetcher, BeautifulSoup
 > extraction, chunking, URL/content-hash dedup), the crawl job API
 > (`POST /api/crawl`, `GET /api/crawl`, `GET /api/crawl/{job_id}`), a BM25 index
 > rebuild endpoint (`POST /api/index/rebuild`) that merges corpus + crawled
-> pages, and an offline crawler test suite — **45 tests total**. Phases 3
-> (UI polish), 5 (persistent indexing), 6+ remain roadmap backlog.
+> pages, and an offline crawler test suite — **45 backend tests total**.
+> Phases 5+ (persistent indexing, semantic, hybrid, RAG) remain roadmap
+> backlog.

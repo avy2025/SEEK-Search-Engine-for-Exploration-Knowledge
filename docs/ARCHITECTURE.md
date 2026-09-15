@@ -59,6 +59,13 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
   - Display visually separated AI synthesized answers with clickable source citations.
   - Handle loading skeletons, error states, and pagination.
 
+> **Implemented (Phase 3)**: the SEEK search UI is live — a minimal search-driven
+> homepage with a prominent search bar, sample queries, real ranked results
+> (title/source/snippet/score/rank/matched terms), full loading / empty / error
+> states, URL-query sync (`/?q=…`), a configurable API base URL
+> (`VITE_API_BASE_URL`), and health polling. Mode selectors and AI answers are
+> roadmap backlog (Phases 7–9).
+
 ### 3.2 API Layer (`backend/api/`)
 - **Framework**: FastAPI (ASGI)
 - **Endpoints**:
@@ -71,9 +78,10 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 
 > **Implemented (Phase 4)**: `GET /health`, `GET /` (service meta),
 > `GET /api/search`, `POST /api/crawl`, `GET /api/crawl`,
-> `GET /api/crawl/{job_id}` and `POST /api/index/rebuild` are live and exercised
-> end-to-end by the acceptance probe (`scripts/probe_phase2.py`) and the test
-> suites (`tests/test_search_phase2.py`, `tests/test_crawler_phase4.py`).
+> `GET /api/crawl/{job_id}` and `POST /api/index/rebuild` are live, consumed by
+> the Phase 3 React UI (`frontend/`) and exercised end-to-end by the acceptance
+> probe (`scripts/probe_phase2.py`) and the test suites
+> (`tests/test_search_phase2.py`, `tests/test_crawler_phase4.py`).
 > `POST /api/answer` (RAG) remains roadmap backlog.
 
 ### 3.3 Content & Crawler Pipeline (`backend/crawler/`, `backend/processing/`)

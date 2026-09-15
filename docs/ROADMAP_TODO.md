@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 4 (Controlled Web Crawler) - **COMPLETED**  
-> **Next Recommended Phase**: Phase 3 (UI Implementation)
+> **Current Phase**: Phase 3 (UI Implementation) - **COMPLETED**  
+> **Next Recommended Phase**: Phase 5 (Persistent Indexing Pipeline)
 
 ---
 
@@ -33,11 +33,13 @@
 
 ---
 
-### [ ] Phase 3: UI Implementation
-- [ ] Build clean SEEK homepage search component.
-- [ ] Build search results page (displaying titles, domain badges, snippets, relevance scores).
-- [ ] Implement query loading states, error boundaries, and empty result handling.
-- [ ] Connect React UI to FastAPI `/api/search` endpoint.
+### [x] Phase 3: UI Implementation (COMPLETED)
+- [x] Build clean SEEK homepage search component.
+- [x] Build search results page (displaying titles, domain badges, snippets, relevance scores).
+- [x] Implement query loading states, error boundaries, and empty result handling.
+- [x] Connect React UI to FastAPI `/api/search` endpoint.
+- [x] Configurable API base URL (`VITE_API_BASE_URL`) + single frontend API client.
+- [x] URL-query sync (`/?q=…`) with back/forward support; browser-level sanity checks.
 
 ---
 

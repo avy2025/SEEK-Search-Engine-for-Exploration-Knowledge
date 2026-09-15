@@ -4,6 +4,7 @@
 
 [![Phase 1: Foundation Ready](https://img.shields.io/badge/Phase%201-Completed-brightgreen.svg)]()
 [![Phase 2: Search MVP](https://img.shields.io/badge/Phase%202-Completed-brightgreen.svg)]()
+[![Phase 3: UI](https://img.shields.io/badge/Phase%203-Search%20UI-Completed-brightgreen.svg)]()
 [![Phase 4: Crawler](https://img.shields.io/badge/Phase%204-Controlled%20Crawler-Completed-brightgreen.svg)]()
 [![Stack: FastAPI + React + Docker](https://img.shields.io/badge/Stack-FastAPI%20%7C%20React%20%7C%20Docker-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
@@ -20,8 +21,8 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## 🚦 Current Project Status
 
-- **Current Phase**: **Phase 4 — Controlled Web Crawler & Document Ingestion** `[COMPLETED]`
-- **Next Phase**: **Phase 3 — Search UI polish / in-progress UI work** `[UPCOMING]`
+- **Phases 1–4**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler
+- **Next Phase**: **Phase 5 — Persistent Indexing Pipeline** `[UPCOMING]`
 
 ---
 
@@ -76,12 +77,57 @@ committed sample corpus. Everything is zero-cost and runs without paid APIs:
    - Returns `{query, total, limit, hits[], took_ms, message}` — ranked, snipped,
      source-tagged results. Accessible via [http://localhost:8000/api/search?q=docker](http://localhost:8000/api/search?q=docker).
 
-6. **Real Search UI** (React frontend):
-   - Live BM25 search against the FastAPI backend with loading / empty / error states,
-     ranked cards with keyword excerpts, matched-term chips, and the existing health panel.
+6. **Phase 2 MVP UI** (React frontend, superseded by Phase 3):
+   - Live BM25 search against the FastAPI backend with ranked cards, keyword
+     excerpts and the health panel.
 
 7. **Tests** — `tests/test_search_phase2.py` (20 tests total incl. Phase 1):
    - Verifies corpus loading, tokenisation, snippets, BM25 ranking, pipeline and the live API.
+
+---
+
+## ✅ PHASE 3 COMPLETE FEATURES (SEEK Search UI)
+
+Phase 3 turns the frontend into a polished, search-engine-focused experience
+built on the **existing** FastAPI backend (`GET /api/search`), with no new
+backend logic and no future-phase features:
+
+1. **Search Homepage** (`frontend/src/`):
+   - Clean, minimal landing: SEEK branding, tagline, prominent search bar with
+     keyboard (Enter) + button submission, sample-query shortcuts, visible
+     focus states and a responsive layout.
+
+2. **Real Search Results**:
+   - Renders the genuine `{hits[]}` response: title, source/domain, snippet,
+     relevance score, rank and `matched_terms` chips. Sources are split into
+     host + path (or file path for corpus docs) so long URLs never break layout.
+
+3. **Complete Search States**:
+   - Initial (landing), loading (spinner + disabled submit), success (ranked
+     cards), empty ("No results found" + suggestion — a response counts as
+     empty when no hit earned a non-zero BM25 score), and error (user-friendly
+     panel + Retry, no stack traces). Empty/whitespace queries are blocked
+     client-side.
+
+4. **API Client** (`frontend/src/lib/api.ts`):
+   - Single configurable client (`VITE_API_BASE_URL`, default
+     `http://localhost:8000`, same-origin proxy fallback) — no duplicated or
+     hardcoded endpoints; health polling preserved from Phase 1.
+
+5. **URL Integrations**:
+   - Query syncs to `/?q=…` with back/forward (popstate) support and deep-link
+     loading on refresh. Fixed the Vite dev proxy prefix rewrite so `/api/*`
+     reaches the backend unchanged.
+
+6. **Accessibility**:
+   - Semantic HTML (`header/main/footer`, `form role="search"`, `ol` results,
+     `<article>` cards), `sr-only` labels, `aria-live`/`role="status"`
+     announcements, visible `focus-visible` rings, and accessible buttons.
+
+7. **Verification**:
+   - `tsc --noEmit` + production `vite build` pass; real headless-browser runs
+     confirmed landing, ranked results (`?q=python` shows title/rank/score),
+     empty state, loading spinner and backend-down error panel.
 
 ---
 
@@ -145,7 +191,7 @@ To keep the development scope clean and strictly phase-aligned, the following co
 
 ```
                                    +---------------------------------------+
-                                   |         React + Vite UI (Phase 2)     |
+                                   |         React + Vite UI (Phase 3)     |
                                    |      Search box + ranked results      |
                                    |      (Port 3000 / Nginx Container)    |
                                    +-------------------+-------------------+
@@ -278,12 +324,14 @@ To verify that the Phase 1 backend service and health checks are functioning cor
    }
    ```
 
-3. **Phase 2 Search Smoke Test**:
+3. **Frontend Search Smoke Test (Phase 3 UI)**:
    ```bash
-   curl -s "http://localhost:8000/api/search?q=docker&limit=3" | python -m json.tool
+   cd frontend && npm install && npm run dev   # serves http://localhost:3000
    ```
-   Expected: a `200` with `hits[]` — each hit holding `rank`, `title`, `source`,
-   `snippet`, `score`, and `matched_terms` (ranked BM25 results from the corpus).
+   Then open [http://localhost:3000](http://localhost:3000), type `docker container`
+   (or press a sample query) and press Enter — ranked results from the real
+   `GET /api/search` endpoint render with title, source, snippet and score.
+   The query syncs to `/?q=…`, so back/forward and refresh work.
 
 4. **Phase 4 Crawl Smoke Test** (network required — crawls `https://example.com`):
    ```bash
@@ -309,7 +357,8 @@ To verify that the Phase 1 backend service and health checks are functioning cor
 
 ## 🔮 Next Planned Phase
 
-**Phase 3: Search UI polish** (the crawler milestone is delivered; UI work resumes here)
+**Phase 5: Persistent Indexing Pipeline** (persist crawled output to PostgreSQL,
+incremental rebuilds, index-on-disk)
 
 ---
 
