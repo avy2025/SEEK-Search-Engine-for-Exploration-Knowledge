@@ -111,7 +111,12 @@ def _persist_best_effort(documents: list[ProcessedDocument]) -> int:
     from backend.db.models import Document
 
     docs = [
-        Document(title=d.title, content=d.content, source=d.source)
+        Document(
+            title=d.title,
+            content=d.content,
+            source=d.source,
+            content_hash=d.content_hash or "",
+        )
         for d in documents
     ]
     try:
