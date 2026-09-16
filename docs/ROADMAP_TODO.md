@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 3 (UI Implementation) - **COMPLETED**  
-> **Next Recommended Phase**: Phase 5 (Persistent Indexing Pipeline)
+> **Current Phase**: Phase 5 (Persistent Indexing Pipeline) - **COMPLETED**  
+> **Next Recommended Phase**: Phase 6 (Semantic Search, Local ML Embeddings)
 
 ---
 
@@ -55,10 +55,13 @@
 
 ---
 
-### [ ] Phase 5: Persistent Indexing Pipeline
-- [ ] Wire crawler output directly to PostgreSQL document storage (currently best-effort).
-- [ ] Create incremental and full index rebuild routines (`/api/index/rebuild`).
-- [ ] Persist BM25 index to `indexes/` directory.
+### [x] Phase 5: Persistent Indexing Pipeline (COMPLETED)
+- [x] Make PostgreSQL the canonical document source (repository `list_all`, idempotent `persist_corpus`, per-document SHA-256 `content_hash`).
+- [x] Persist BM25 index to `indexes/bm25/` — `index.pkl` + `metadata.json`, atomic writes, `INDEX_FORMAT_VERSION = 1`.
+- [x] Build `IndexManager` lifecycle: full `rebuild()`, incremental `refresh()` (new/modified/deleted change detection), `status()`.
+- [x] Resilient startup loading (persisted artifact → auto-rebuild from PG → empty) wired into the FastAPI `lifespan`.
+- [x] Add `POST /api/index/refresh` and `GET /api/index/status`; keep legacy in-memory rebuild fallback when Postgres is down.
+- [x] Phase 5B regression suite (`tests/test_index_persistence_phase5b.py`) — 67 backend tests total pass.
 
 ---
 

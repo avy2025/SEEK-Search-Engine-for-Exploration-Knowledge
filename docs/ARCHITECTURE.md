@@ -73,15 +73,19 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
   - `GET/POST /api/search`: Primary search handler (supports keyword, semantic, or hybrid).
   - `POST /api/crawl`: Trigger domain-controlled crawl job.
   - `GET /api/crawl/{job_id}`: Poll status of running crawl job.
-  - `POST /api/index/rebuild`: Administrative endpoint to rebuild inverted/vector indexes.
+  - `POST /api/index/rebuild`: Rebuild indexes (PostgreSQL-backed, with legacy in-memory fallback).
+  - `POST /api/index/refresh`: Incremental change detection (new/modified/deleted) against PostgreSQL.
+  - `GET /api/index/status`: Persistent-index health and staleness status.
   - `POST /api/answer`: Generate RAG answer based on retrieved documents.
 
-> **Implemented (Phase 4)**: `GET /health`, `GET /` (service meta),
+> **Implemented (Phases 4–5)**: `GET /health`, `GET /` (service meta),
 > `GET /api/search`, `POST /api/crawl`, `GET /api/crawl`,
-> `GET /api/crawl/{job_id}` and `POST /api/index/rebuild` are live, consumed by
+> `GET /api/crawl/{job_id}`, `POST /api/index/rebuild`,
+> `POST /api/index/refresh` and `GET /api/index/status` are live, consumed by
 > the Phase 3 React UI (`frontend/`) and exercised end-to-end by the acceptance
 > probe (`scripts/probe_phase2.py`) and the test suites
-> (`tests/test_search_phase2.py`, `tests/test_crawler_phase4.py`).
+> (`tests/test_search_phase2.py`, `tests/test_crawler_phase4.py`,
+> `tests/test_index_persistence_phase5b.py`).
 > `POST /api/answer` (RAG) remains roadmap backlog.
 
 ### 3.3 Content & Crawler Pipeline (`backend/crawler/`, `backend/processing/`)
@@ -109,10 +113,16 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 - **Lexical Baseline**: BM25 algorithm (`rank-bm25`) indexing title, headers, and text chunks.
 - **Semantic Engine**: `SentenceTransformers` (`all-MiniLM-L6-v2`) generating text embeddings, indexed in `FAISS` or `ChromaDB`.
 
-> **Implemented (Phase 2)**: lexical retrieval is live via
+> **Implemented (Phases 2 & 5)**: lexical retrieval is live via
 > `backend/processing/` (tokenizer, loader, snippets) -> `backend/pipeline.py`
 > (corpus + crawled pages -> `backend/search/engine.py`) -> `GET /api/search`.
-> Semantic/hybrid retrieval (Phase 6/7) is roadmap backlog.
+> Phase 5 adds a persistent index lifecycle: `backend/search/index_store.py`
+> (atomic `indexes/bm25/index.pkl` + `metadata.json` artifact, versioned) and
+> `backend/search/index_manager.py` (`IndexManager` singleton — full `rebuild`,
+> incremental `refresh` via `document_id -> content_hash` change detection,
+> `status`, resilient startup loading). PostgreSQL is the canonical source of
+> truth; the on-disk artifact is a derived, rebuildable cache. Semantic/hybrid
+> retrieval (Phase 6/7) is roadmap backlog.
 
 ### 3.5 Ranking Engine (`backend/ranking/`)
 - Combines candidate sets using a weighted hybrid score:

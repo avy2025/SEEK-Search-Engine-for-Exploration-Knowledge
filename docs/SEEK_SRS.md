@@ -286,7 +286,7 @@ The weights are configurable and will be tuned experimentally using a small rele
 - **Phase 13 – Evaluation**: Measure relevance, latency, crawl throughput and resource usage.
 - **Phase 14 – Documentation**: README, setup guide, architecture, API documentation and demonstration.
 
-> **Implementation Status (Phases 1–4 complete)**: Phases 0–4 are implemented
+> **Implementation Status (Phases 1–5 complete)**: Phases 0–4 are implemented
 > (Phase 3 complete). Phase 2 shipped the local corpus (`data/sample_corpus/`),
 > SQLAlchemy document models, BM25 lexical retrieval in `backend/search/`, the
 > processing pipeline in `backend/` (`backend/processing`, `backend/pipeline.py`)
@@ -298,6 +298,12 @@ The weights are configurable and will be tuned experimentally using a small rele
 > extraction, chunking, URL/content-hash dedup), the crawl job API
 > (`POST /api/crawl`, `GET /api/crawl`, `GET /api/crawl/{job_id}`), a BM25 index
 > rebuild endpoint (`POST /api/index/rebuild`) that merges corpus + crawled
-> pages, and an offline crawler test suite — **45 backend tests total**.
-> Phases 5+ (persistent indexing, semantic, hybrid, RAG) remain roadmap
-> backlog.
+> pages, and an offline crawler test suite. Phase 5 delivered the persistent
+> indexing pipeline: PostgreSQL as the canonical document source
+> (`DocumentRepository.list_all`, idempotent `persist_corpus`, per-document
+> SHA-256 content hashes), a versioned on-disk BM25 artifact
+> (`indexes/bm25/index.pkl` + `metadata.json`, atomic writes), an `IndexManager`
+> lifecycle (`rebuild`, change-detection `refresh`, `status`), resilient
+> startup loading, and the extended index API (`POST /api/index/rebuild`,
+> `POST /api/index/refresh`, `GET /api/index/status`) — **67 backend tests
+> total** pass. Phases 6+ (semantic, hybrid, RAG) remain roadmap backlog.

@@ -6,6 +6,7 @@
 [![Phase 2: Search MVP](https://img.shields.io/badge/Phase%202-Completed-brightgreen.svg)]()
 [![Phase 3: UI](https://img.shields.io/badge/Phase%203-Search%20UI-Completed-brightgreen.svg)]()
 [![Phase 4: Crawler](https://img.shields.io/badge/Phase%204-Controlled%20Crawler-Completed-brightgreen.svg)]()
+[![Phase 5: Persistent Index](https://img.shields.io/badge/Phase%205-Persistent%20Indexing-Completed-brightgreen.svg)]()
 [![Stack: FastAPI + React + Docker](https://img.shields.io/badge/Stack-FastAPI%20%7C%20React%20%7C%20Docker-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
@@ -21,8 +22,8 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## 🚦 Current Project Status
 
-- **Phases 1–4**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler
-- **Next Phase**: **Phase 5 — Persistent Indexing Pipeline** `[UPCOMING]`
+- **Phases 1–5**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler · Persistent Indexing Pipeline
+- **Next Phase**: **Phase 6 — Semantic Search (Local ML Embeddings)** `[UPCOMING]`
 
 ---
 
@@ -177,6 +178,55 @@ endpoint:
 
 ---
 
+## ✅ PHASE 5 COMPLETE FEATURES (Persistent Indexing Pipeline)
+
+Phase 5 makes **PostgreSQL the canonical document store** and turns the BM25
+index into a versioned, on-disk artifact that survives restarts. The engine is
+always reconstructed from the current document set — PostgreSQL is the source
+of truth, `indexes/bm25/index.pkl` is a derived artifact:
+
+1. **Canonical persistence** (`backend/db/repository.py`, `backend/pipeline.py`):
+   - `list_all()` reads every `documents` row deterministically; `persist_corpus()`
+     idempotently seeds the committed corpus into Postgres (never raises).
+   - Each document carries a SHA-256 `content_hash`, enabling change detection.
+
+2. **Persistent BM25 artifact** (`backend/search/index_store.py`):
+   - `indexes/bm25/index.pkl` + `indexes/bm25/metadata.json` (version, timestamps,
+     corpus hash, counts) written **atomically** (same-dir `.tmp` + `os.replace`).
+   - `load_index()` never raises; corrupt/absent artifacts degrade gracefully to a
+     full rebuild. `INDEX_FORMAT_VERSION = 1`.
+
+3. **Index lifecycle manager** (`backend/search/index_manager.py`):
+   - `rebuild()` — full BM25 rebuild from PostgreSQL (falls back to an in-memory
+     corpus+crawl build when Postgres is unreachable).
+   - `refresh()` — change detection via `document_id -> content_hash` signature
+     diff (new / modified / deleted); `unchanged` short-circuits a rewrite.
+   - `status()` — `index_exists`, `loaded`, `document_count`, `database_available`,
+     `index_version`, `corpus_hash`, `stale`, plus an explainer `message`.
+
+4. **Resilient startup** (`backend/main.py` lifespan):
+   - On boot the manager prefers the persisted artifact; if missing/stale/corrupt
+     and Postgres is reachable it auto-rebuilds; otherwise serves empty until an
+     explicit `POST /api/index/rebuild`.
+
+5. **Index API** (`backend/api/index.py`):
+   - `POST /api/index/rebuild` — rebuild (PG-backed or legacy fallback) →
+     `{status, documents_indexed, corpus_documents, crawled_documents,
+     source, index_version, took_ms}`.
+   - `POST /api/index/refresh` — incremental change detection against Postgres.
+   - `GET /api/index/status` — persistent-index health for ops/UIs.
+
+6. **Search contract** — `document_id` is now `str(row.document_id)` (the
+   Postgres integer primary key, stringified) for PG-sourced documents.
+
+7. **Verification** — `tests/test_index_persistence_phase5b.py` covers rebuild,
+   persistence across restart, change detection (new/modified/deleted), resilient
+   startup, atomic-write failure recovery and the live API through TestClient.
+   **67 backend tests total** pass (`pytest -q`), plus the `scripts/probe_phase2.py`
+   import/app probe (18/18 imports).
+
+---
+
 ## ❌ NOT YET IMPLEMENTED
 
 To keep the development scope clean and strictly phase-aligned, the following components are **NOT** yet implemented:
@@ -210,19 +260,20 @@ To keep the development scope clean and strictly phase-aligned, the following co
                                     +----------------+ +------------------+
                                              |
                                              v
-                          +--------------------------------------------+
-                          |  /api/search  (BM25)  /api/crawl (jobs)   |
-                          |  /api/index/rebuild (corpus + crawled)    |
-                          +-------------------+------------------------+
-                                              |
-                          +-------------------+--------------------+
-                          |                                          |
-                          v                                          v
++--------------------------------------------+
+                           |  /api/search  (BM25)  /api/crawl (jobs)   |
+                           |  /api/index/rebuild | refresh | status     |
+                           +-------------------+------------------------+
+                                               |
+                           +-------------------+--------------------+
+                           |                                          |
+                           v                                          v
           +---------------------------------+             +-----------------------+
-          |  Crawler pipeline (Phase 4)     |------\     |  In-memory BM25 index |
-          |  seeds -> robots -> fetch ->    |       \    |  corpus + crawl-* docs |
-          |  extract -> chunk -> dedup      |        \   |  + best-effort Postgres|
-          +---------------------------------+         \  +-----------------------+
+          |  Crawler pipeline (Phase 4)     |------\     |  BM25 engine (Phase 5)|
+          |  seeds -> robots -> fetch ->    |       \    |  canonical: PostgreSQL|
+          |  extract -> chunk -> dedup      |        \   |  artifact: indexes/    |
+          +---------------------------------+         \  |  bm25/index.pkl        |
+                                                       \ +-----------------------+
 ```
 
 ---
@@ -357,8 +408,8 @@ To verify that the Phase 1 backend service and health checks are functioning cor
 
 ## 🔮 Next Planned Phase
 
-**Phase 5: Persistent Indexing Pipeline** (persist crawled output to PostgreSQL,
-incremental rebuilds, index-on-disk)
+**Phase 6: Semantic Search** (local `SentenceTransformers` embeddings +
+FAISS vector index in `indexes/faiss_index.bin`, semantic retrieval mode)
 
 ---
 
