@@ -39,6 +39,7 @@ __all__ = [
     "SearchEngine",
     "build_pipeline",
     "run_pipeline",
+    "persist_corpus",
 ]
 
 
@@ -94,6 +95,43 @@ def run_pipeline(report: Optional[PipelineReport] = None) -> PipelineReport:
         took_ms=took_ms,
         message=message % (len(processed), persisted) if persisted else message % len(processed),
     )
+
+
+def persist_corpus(repository: Optional["DocumentRepository"] = None) -> int:
+    """Ensure the committed corpus is present in PostgreSQL (idempotent).
+
+    The Phase 5B index builder calls this *before* reconstructing the BM25
+    index so the canonical PostgreSQL document set always includes the local
+    sample corpus. Rows already present (matching ``content_hash``) are
+    skipped, so repeated calls are cheap. Returns the number of rows newly
+    inserted (0 when everything already exists or PostgreSQL is unavailable).
+    Never raises.
+    """
+    from backend.db.models import Document
+
+    repo = repository
+    if repo is None:
+        try:
+            repo = create_initialised_document_repository(settings.DATABASE_URL)
+        except Exception as exc:  # noqa: BLE001 - corpus persist is optional
+            logger.debug("corpus persist skipped, repository unavailable: %s", exc)
+            return 0
+    if repo is None or not getattr(repo, "is_available", lambda: False)():
+        return 0
+    docs = [
+        Document(
+            title=d.title,
+            content=d.content,
+            source=d.source,
+            content_hash=d.content_hash or "",
+        )
+        for d in load_corpus()
+    ]
+    try:
+        return repo.upsert_many(docs)
+    except Exception as exc:  # noqa: BLE001 - best-effort
+        logger.debug("corpus persist skipped: %s", exc)
+        return 0
 
 
 def _persist_best_effort(documents: list[ProcessedDocument]) -> int:

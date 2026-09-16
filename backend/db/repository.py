@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -95,17 +95,33 @@ class DocumentRepository:
             return None
 
     def count(self) -> int:
+        """Total number of persisted documents (0 when unavailable)."""
         if self._session is None:
             return 0
         try:
-            return self._session.scalar(
-                select(Document.document_id).order_by(None).limit(None)
-            ) or (
-                self._session.query(Document).count()
+            return int(
+                self._session.scalar(select(func.count()).select_from(Document)) or 0
             )
         except SQLAlchemyError as exc:  # pragma: no cover - depends on live DB
             logger.warning("count skipped: %s", exc)
             return 0
+
+    def list_all(self, *, limit: Optional[int] = None) -> list[Document]:
+        """Return every persisted document in deterministic ``document_id`` order.
+
+        Used by the Phase 5B index builder to reconstruct the BM25 index from
+        PostgreSQL. Never raises: returns ``[]`` when unavailable.
+        """
+        if self._session is None:
+            return []
+        try:
+            stmt = select(Document).order_by(Document.document_id)
+            if limit is not None:
+                stmt = stmt.limit(max(0, int(limit)))
+            return list(self._session.scalars(stmt))
+        except SQLAlchemyError as exc:  # pragma: no cover - depends on live DB
+            logger.warning("list_all skipped: %s", exc)
+            return []
 
     def close(self) -> None:
         if self._session is not None:
