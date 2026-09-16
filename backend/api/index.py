@@ -31,6 +31,10 @@ from backend.search.index_manager import (
     IndexUnavailableError,
     get_index_manager,
 )
+from backend.search.semantic import (
+    SemanticIndexUnavailableError,
+    get_semantic_index_manager,
+)
 
 router = APIRouter(prefix="/api/index", tags=["index"])
 
@@ -84,7 +88,77 @@ def refresh_index() -> dict[str, object]:
 @router.get("/status", name="index_status")
 def index_status() -> dict[str, object]:
     """Report the current persistent index / database state (never raises)."""
-    return get_index_manager().status()
+    status = get_index_manager().status()
+    try:
+        status["semantic"] = get_semantic_index_manager().status()
+    except Exception as exc:  # noqa: BLE001 - status must never raise
+        status["semantic"] = {
+            "available": False,
+            "loaded": False,
+            "message": f"semantic status unavailable: {exc}",
+        }
+    return status
+
+
+# --------------------------------------------------------------------------- #
+# Phase 6 semantic index management
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/semantic/rebuild", name="rebuild_semantic_index")
+def rebuild_semantic_index(
+    request: Optional[RebuildRequest] = None,
+) -> dict[str, object]:
+    """Rebuild the semantic FAISS index from PostgreSQL and hot-swap it.
+
+    Requires PostgreSQL (the canonical document source) and the local embedding
+    stack (sentence-transformers + faiss). Unlike the BM25 endpoint there is no
+    offline fallback: embedding a legacy in-memory corpus would silently diverge
+    from the canonical document set, so a failure is reported instead.
+    """
+    started = time.perf_counter()
+    include_crawled = bool(request.include_crawled) if request else True
+    manager = get_semantic_index_manager()
+    try:
+        result = manager.rebuild(include_crawled=include_crawled)
+    except SemanticIndexUnavailableError as exc:
+        return {
+            "status": "error",
+            "code": "semantic_index_unavailable",
+            "documents_indexed": 0,
+            "message": str(exc),
+            "took_ms": round((time.perf_counter() - started) * 1000.0, 3),
+        }
+    took_ms = (time.perf_counter() - started) * 1000.0
+    return {
+        "status": result.status,
+        "documents_indexed": result.documents_indexed,
+        "model": result.model,
+        "dimension": result.dimension,
+        "index_version": result.index_version,
+        "built_at": result.built_at,
+        "updated_at": result.updated_at,
+        "source": result.source,
+        "include_crawled": include_crawled,
+        "took_ms": round(took_ms, 3),
+        "message": result.message,
+    }
+
+
+@router.post("/semantic/refresh", name="refresh_semantic_index")
+def refresh_semantic_index() -> dict[str, object]:
+    """Rebuild the semantic index only when documents changed in PostgreSQL."""
+    started = time.perf_counter()
+    result = get_semantic_index_manager().refresh()
+    took_ms = (time.perf_counter() - started) * 1000.0
+    return {
+        "status": result.status,
+        "document_count": result.document_count,
+        "index_version": result.index_version,
+        "changed": result.changed,
+        "message": result.message,
+        "took_ms": round(took_ms, 3),
+    }
 
 
 def _legacy_rebuild(include_crawled: bool, started: float) -> dict[str, object]:
