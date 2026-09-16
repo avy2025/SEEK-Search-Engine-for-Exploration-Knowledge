@@ -75,17 +75,21 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
   - `GET /api/crawl/{job_id}`: Poll status of running crawl job.
   - `POST /api/index/rebuild`: Rebuild indexes (PostgreSQL-backed, with legacy in-memory fallback).
   - `POST /api/index/refresh`: Incremental change detection (new/modified/deleted) against PostgreSQL.
-  - `GET /api/index/status`: Persistent-index health and staleness status.
+  - `POST /api/index/semantic/rebuild`: Rebuild the FAISS semantic index from PostgreSQL.
+  - `POST /api/index/semantic/refresh`: Incremental change detection for the FAISS semantic index.
+  - `GET /api/index/status`: Persistent-index health and staleness status (BM25 + semantic).
   - `POST /api/answer`: Generate RAG answer based on retrieved documents.
 
-> **Implemented (Phases 4–5)**: `GET /health`, `GET /` (service meta),
-> `GET /api/search`, `POST /api/crawl`, `GET /api/crawl`,
-> `GET /api/crawl/{job_id}`, `POST /api/index/rebuild`,
-> `POST /api/index/refresh` and `GET /api/index/status` are live, consumed by
-> the Phase 3 React UI (`frontend/`) and exercised end-to-end by the acceptance
-> probe (`scripts/probe_phase2.py`) and the test suites
+> **Implemented (Phases 4–6)**: `GET /health`, `GET /` (service meta),
+> `GET /api/search` (with `mode=lexical|bm25|semantic`), `POST /api/crawl`,
+> `GET /api/crawl`, `GET /api/crawl/{job_id}`, `POST /api/index/rebuild`,
+> `POST /api/index/refresh`, `POST /api/index/semantic/rebuild`,
+> `POST /api/index/semantic/refresh` and `GET /api/index/status` are live,
+> consumed by the Phase 3 React UI (`frontend/`) and exercised end-to-end by the
+> acceptance probe (`scripts/probe_phase2.py`) and the test suites
 > (`tests/test_search_phase2.py`, `tests/test_crawler_phase4.py`,
-> `tests/test_index_persistence_phase5b.py`).
+> `tests/test_index_persistence_phase5b.py`,
+> `tests/test_semantic_search_phase6.py`).
 > `POST /api/answer` (RAG) remains roadmap backlog.
 
 ### 3.3 Content & Crawler Pipeline (`backend/crawler/`, `backend/processing/`)
@@ -113,7 +117,7 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 - **Lexical Baseline**: BM25 algorithm (`rank-bm25`) indexing title, headers, and text chunks.
 - **Semantic Engine**: `SentenceTransformers` (`all-MiniLM-L6-v2`) generating text embeddings, indexed in `FAISS` or `ChromaDB`.
 
-> **Implemented (Phases 2 & 5)**: lexical retrieval is live via
+> **Implemented (Phases 2, 5 & 6)**: lexical retrieval is live via
 > `backend/processing/` (tokenizer, loader, snippets) -> `backend/pipeline.py`
 > (corpus + crawled pages -> `backend/search/engine.py`) -> `GET /api/search`.
 > Phase 5 adds a persistent index lifecycle: `backend/search/index_store.py`
@@ -121,8 +125,20 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 > `backend/search/index_manager.py` (`IndexManager` singleton — full `rebuild`,
 > incremental `refresh` via `document_id -> content_hash` change detection,
 > `status`, resilient startup loading). PostgreSQL is the canonical source of
-> truth; the on-disk artifact is a derived, rebuildable cache. Semantic/hybrid
-> retrieval (Phase 6/7) is roadmap backlog.
+> truth; the on-disk artifact is a derived, rebuildable cache.
+>
+> Phase 6 adds semantic retrieval: `backend/search/embeddings.py` wraps
+> `SentenceTransformers` (`all-MiniLM-L6-v2` → 384-dim, L2-normalised batch
+> encoding; the model is loaded lazily on first use, never at import/boot),
+> `backend/search/faiss_store.py` persists the FAISS `IndexFlatIP` artifact
+> + metadata to `indexes/faiss_index.bin` / `faiss_metadata.json` (atomic
+> writes, `FAISS_FORMAT_VERSION = 1`), and `backend/search/semantic.py` hosts
+> the `SemanticIndexManager` singleton (`rebuild`, change-detection `refresh`,
+> `load_on_startup`, cosine-similarity `search`, `status`). `GET /api/search` now
+> accepts `mode=lexical|bm25|semantic`; when the embedding stack or index is
+> unavailable the API returns a structured `semantic` status block (`unavailable`)
+> with `hits: []` and never silently falls back to BM25. Hybrid merging of the
+> two signal sources is Phase 7 (roadmap backlog).
 
 ### 3.5 Ranking Engine (`backend/ranking/`)
 - Combines candidate sets using a weighted hybrid score:

@@ -7,6 +7,7 @@
 [![Phase 3: UI](https://img.shields.io/badge/Phase%203-Search%20UI-Completed-brightgreen.svg)]()
 [![Phase 4: Crawler](https://img.shields.io/badge/Phase%204-Controlled%20Crawler-Completed-brightgreen.svg)]()
 [![Phase 5: Persistent Index](https://img.shields.io/badge/Phase%205-Persistent%20Indexing-Completed-brightgreen.svg)]()
+[![Phase 6: Semantic Search](https://img.shields.io/badge/Phase%206-Semantic%20Search-Completed-brightgreen.svg)]()
 [![Stack: FastAPI + React + Docker](https://img.shields.io/badge/Stack-FastAPI%20%7C%20React%20%7C%20Docker-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
@@ -22,8 +23,8 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## 🚦 Current Project Status
 
-- **Phases 1–5**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler · Persistent Indexing Pipeline
-- **Next Phase**: **Phase 6 — Semantic Search (Local ML Embeddings)** `[UPCOMING]`
+- **Phases 1–6**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler · Persistent Indexing Pipeline · Semantic Search (Local ML Embeddings)
+- **Next Phase**: **Phase 7 — Hybrid Ranking Engine** `[UPCOMING]`
 
 ---
 
@@ -227,11 +228,61 @@ of truth, `indexes/bm25/index.pkl` is a derived artifact:
 
 ---
 
+## ✅ PHASE 6 COMPLETE FEATURES (Semantic Search, Local ML Embeddings)
+
+Phase 6 adds a **local semantic retrieval path** on top of the Phase 5
+pipeline: documents are embedded with SentenceTransformers, stored in a
+persistent FAISS vector index, and searched by cosine similarity — with a
+guarantee that the existing BM25 lexical mode keeps working exactly as before:
+
+1. **Local embeddings** (`backend/search/embeddings.py`):
+   - `EmbeddingGenerator` wrapping `sentence-transformers/all-MiniLM-L6-v2`
+     (384-dim, L2-normalised, batched) with query-side normalisation.
+   - **Lazy loading**: the model is never loaded at import time or on server
+     boot — only the first real semantic operation pays the load cost
+     (singleton + thread lock).
+   - `EmbeddingUnavailableError` + fast `is_importable()` guard so a missing ML
+     stack degrades cleanly instead of crashing.
+
+2. **Persistent FAISS store** (`backend/search/faiss_store.py`):
+   - `indexes/faiss_index.bin` + `indexes/faiss_metadata.json` (format version,
+     model, dimension, timestamps, corpus hash, `document_id`/`title`/`source`/
+     `content_hash` per vector), written **atomically** (`.tmp` + `os.replace`).
+   - `load_faiss_index()` never raises; corrupt/absent artifacts degrade
+     gracefully. `FAISS_FORMAT_VERSION = 1`.
+
+3. **Semantic index lifecycle** (`backend/search/semantic.py`):
+   - `SemanticIndexManager` singleton: full `rebuild()`, change-detection
+     `refresh()` (`document_id -> content_hash` diff: new/modified/deleted),
+     `load_on_startup()`, cosine-similarity `search()`, never-raises `status()`.
+   - **Persistence across restart**: on boot the manager loads the FAISS
+     artifact from disk and reports `source=persistent_faiss_index` without
+     reloading the embedding model.
+
+4. **Semantic API** (`backend/api/search.py`, `backend/api/index.py`):
+   - `GET /api/search?q=…&mode=semantic` — cosine-score hits, `score_type`
+     label, and a full `semantic` status block; `mode=lexical`/`bm25` keeps the
+     original BM25 contract unchanged (default).
+   - `POST /api/index/semantic/rebuild` and `POST /api/index/semantic/refresh`;
+     `GET /api/index/status` now reports both BM25 (`index`/… fields) and
+     semantic (`semantic` block) health.
+   - **No silent fallback**: when the model or index is unavailable, the API
+     returns `hits: []` with `semantic.status = "unavailable"` and an explainer —
+     callers can always tell "no semantic result" from "semantic broken".
+
+5. **Verification** — `tests/test_semantic_search_phase6.py` covers three
+   tiers: offline deterministic fakes (fake embedder + in-memory repo),
+   the live `all-MiniLM-L6-v2` model (laziness, 384-dim determinism, L2
+   normalisation), and live PostgreSQL end-to-end (rebuild/search/restart,
+   change detection, API flow, missing-model graceful degradation).
+   **97 backend tests total** pass (`pytest -q`), probe 18/18.
+
+---
+
 ## ❌ NOT YET IMPLEMENTED
 
 To keep the development scope clean and strictly phase-aligned, the following components are **NOT** yet implemented:
 
-- ❌ FAISS Vector Indexing & Local Embeddings (Phase 6)
 - ❌ Multi-Signal Hybrid Ranker (Phase 7)
 - ❌ AI / RAG Answer Generation (Phase 8)
 
@@ -261,19 +312,28 @@ To keep the development scope clean and strictly phase-aligned, the following co
                                              |
                                              v
 +--------------------------------------------+
-                           |  /api/search  (BM25)  /api/crawl (jobs)   |
-                           |  /api/index/rebuild | refresh | status     |
-                           +-------------------+------------------------+
-                                               |
-                           +-------------------+--------------------+
-                           |                                          |
-                           v                                          v
-          +---------------------------------+             +-----------------------+
-          |  Crawler pipeline (Phase 4)     |------\     |  BM25 engine (Phase 5)|
-          |  seeds -> robots -> fetch ->    |       \    |  canonical: PostgreSQL|
-          |  extract -> chunk -> dedup      |        \   |  artifact: indexes/    |
-          +---------------------------------+         \  |  bm25/index.pkl        |
-                                                       \ +-----------------------+
+|  /api/search (lexical | semantic)           |
+                            |  /api/crawl (jobs)                          |
+                            |  /api/index/rebuild | refresh | status       |
+                            |  /api/index/semantic/rebuild | refresh        |
+                            +-------------------+------------------------+
+                                                |
+                            +-------------------+------------------------+
+                            |                                          |
+                            v                                          v
+           +---------------------------------+             +-----------------------+
+           |  Crawler pipeline (Phase 4)     |------\     |  BM25 engine (Phase 5)|
+           |  seeds -> robots -> fetch ->    |       \    |  canonical: PostgreSQL|
+           |  extract -> chunk -> dedup      |        \   |  artifact: indexes/    |
+           +---------------------------------+         \  |  bm25/index.pkl        |
+                                                        \ +-----------------------+
+                                                         \
+                                                          \  +-----------------------+
+                                                           \ |  Semantic engine (6)  |
+                                                            \|  FAISS IndexFlatIP    |
+                                                             |  artifact: indexes/   |
+                                                             |  faiss_index.bin      |
+                                                             +-----------------------+
 ```
 
 ---
@@ -285,6 +345,8 @@ To keep the development scope clean and strictly phase-aligned, the following co
 | **Frontend UI** | React 18, TypeScript, Vite, Tailwind CSS | Responsive web search interface |
 | **API Backend** | Python 3.11, FastAPI, Uvicorn, Pydantic v2 | High-performance async REST backend |
 | **Crawler** | httpx, asyncio, BeautifulSoup4, robotparser | Controlled async crawling + extraction |
+| **Embeddings** | sentence-transformers (all-MiniLM-L6-v2) | Local 384-dim semantic embeddings |
+| **Vector Search** | faiss-cpu | Persistent FAISS semantic index (`IndexFlatIP`) |
 | **Database** | PostgreSQL 16 Alpine | Persistent metadata and crawl queue storage |
 | **Containerization** | Docker, Docker Compose, Nginx | Reproducible containerized stack |
 | **Testing** | Pytest, TestClient, Httpx | Automated integration and unit testing |
@@ -404,12 +466,26 @@ To verify that the Phase 1 backend service and health checks are functioning cor
    Expected: `crawled_documents >= 1` after a successful crawl; search now ranks
    `crawl-*` documents alongside the local corpus.
 
+6. **Phase 6 Semantic Search Smoke Test** (local model + FAISS):
+   ```bash
+   # Build the semantic index from PostgreSQL (first run downloads the model)
+   curl -s -X POST http://localhost:8000/api/index/semantic/rebuild
+   # Semantic mode — cosine-similarity hits + a "semantic" status block
+   curl -s "http://localhost:8000/api/search?q=docker&mode=semantic" | python -m json.tool
+   # Index status now reports both BM25 and semantic state
+   curl -s http://localhost:8000/api/index/status | python -m json.tool
+   ```
+   Expected: `mode=semantic` in the response, hits sorted by cosine similarity,
+   `semantic.status=ok`; after restarting the backend the semantic index loads
+   from `indexes/faiss_index.bin` (`source=persistent_faiss_index`) without
+   re-embedding, and the model loads lazily on first semantic query.
+
 ---
 
 ## 🔮 Next Planned Phase
 
-**Phase 6: Semantic Search** (local `SentenceTransformers` embeddings +
-FAISS vector index in `indexes/faiss_index.bin`, semantic retrieval mode)
+**Phase 7: Hybrid Ranking Engine** (merge BM25 lexical and FAISS semantic
+candidates into a single weighted ranking)
 
 ---
 

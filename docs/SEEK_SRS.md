@@ -286,7 +286,7 @@ The weights are configurable and will be tuned experimentally using a small rele
 - **Phase 13 – Evaluation**: Measure relevance, latency, crawl throughput and resource usage.
 - **Phase 14 – Documentation**: README, setup guide, architecture, API documentation and demonstration.
 
-> **Implementation Status (Phases 1–5 complete)**: Phases 0–4 are implemented
+> **Implementation Status (Phases 1–6 complete)**: Phases 0–4 are implemented
 > (Phase 3 complete). Phase 2 shipped the local corpus (`data/sample_corpus/`),
 > SQLAlchemy document models, BM25 lexical retrieval in `backend/search/`, the
 > processing pipeline in `backend/` (`backend/processing`, `backend/pipeline.py`)
@@ -305,5 +305,15 @@ The weights are configurable and will be tuned experimentally using a small rele
 > (`indexes/bm25/index.pkl` + `metadata.json`, atomic writes), an `IndexManager`
 > lifecycle (`rebuild`, change-detection `refresh`, `status`), resilient
 > startup loading, and the extended index API (`POST /api/index/rebuild`,
-> `POST /api/index/refresh`, `GET /api/index/status`) — **67 backend tests
-> total** pass. Phases 6+ (semantic, hybrid, RAG) remain roadmap backlog.
+> `POST /api/index/refresh`, `GET /api/index/status`).
+> Phase 6 delivered semantic retrieval: a lazy, thread-safe
+> `EmbeddingGenerator` (`SentenceTransformers` `all-MiniLM-L6-v2`, 384-dim,
+> L2-normalised; the model never loads at import/startup), a persistent FAISS
+> store (`indexes/faiss_index.bin` + `faiss_metadata.json`, atomic writes,
+> `FAISS_FORMAT_VERSION = 1`), a `SemanticIndexManager` lifecycle (`rebuild`,
+> change-detection `refresh`, `load_on_startup`, cosine-similarity `search`,
+> `status`), `GET /api/search?mode=semantic`, and
+> `POST /api/index/semantic/rebuild` / `/refresh` — with structured
+> `semantic` status reporting and graceful degradation (no silent BM25
+> fallback). **97 backend tests total** pass. Phases 7+ (hybrid ranking, RAG)
+> remain roadmap backlog.

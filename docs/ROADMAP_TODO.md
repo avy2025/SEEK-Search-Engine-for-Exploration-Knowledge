@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 5 (Persistent Indexing Pipeline) - **COMPLETED**  
-> **Next Recommended Phase**: Phase 6 (Semantic Search, Local ML Embeddings)
+> **Current Phase**: Phase 6 (Semantic Search, Local ML Embeddings) - **COMPLETED**  
+> **Next Recommended Phase**: Phase 7 (Hybrid Ranking Engine)
 
 ---
 
@@ -65,11 +65,14 @@
 
 ---
 
-### [ ] Phase 6: Semantic Search (Local ML Embeddings)
-- [ ] Integrate `SentenceTransformers` (`all-MiniLM-L6-v2`) in `backend/search/`.
-- [ ] Build vector embedding generator for document chunks.
-- [ ] Implement FAISS vector index store in `indexes/faiss_index.bin`.
-- [ ] Expose semantic similarity search mode in backend API.
+### [x] Phase 6: Semantic Search (Local ML Embeddings) (COMPLETED)
+- [x] Integrate `SentenceTransformers` (`all-MiniLM-L6-v2`) in `backend/search/` (`backend/search/embeddings.py` — lazy, thread-safe `EmbeddingGenerator`).
+- [x] Build vector embedding generator for document chunks (L2-normalised, batch encoded).
+- [x] Implement FAISS vector index store in `indexes/faiss_index.bin` (`backend/search/faiss_store.py` — atomic writes, `FAISS_FORMAT_VERSION = 1`).
+- [x] Persist FAISS + metadata (`faiss_metadata.json`) and build the `SemanticIndexManager` lifecycle (full `rebuild`, change-detection `refresh`, `load_on_startup`, `status`) in `backend/search/semantic.py`.
+- [x] Expose semantic similarity search mode in backend API (`GET /api/search?mode=semantic`, structured `semantic` status block; `POST /api/index/semantic/rebuild` / `/refresh`); graceful degradation when the ML stack is unavailable (never silently falls back to BM25).
+- [x] Keep BM25 lexical mode fully working (default `mode=lexical`).
+- [x] Phase 6 regression suite (`tests/test_semantic_search_phase6.py` — offline fakes + live model + live PostgreSQL tiers) — **97 backend tests total pass**.
 
 ---
 
