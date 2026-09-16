@@ -20,6 +20,8 @@ MODULES = [
     "backend.search.bm25",
     "backend.search.query",
     "backend.search.engine",
+    "backend.search.index_store",
+    "backend.search.index_manager",
     "backend.pipeline",
     "backend.main",
 ]
