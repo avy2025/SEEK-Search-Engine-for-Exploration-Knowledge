@@ -1,4 +1,6 @@
 from functools import lru_cache
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +24,10 @@ class Settings(BaseSettings):
     SNIPPET_SURROUNDING_WORDS: int = 12
     CACHE_ONLY: bool = True
 
+    # --- Phase 5 Persistent Index ---
+    STORAGE_INDEX_PATH: str = "indexes"
+    INDEX_SUBDIR: str = "bm25"
+
     # --- Phase 4 Controlled Web Crawler ---
     CRAWLER_ALLOWED_DOMAINS: str = ""
     CRAWLER_MAX_DEPTH: int = 2
@@ -40,6 +46,11 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def index_dir(self) -> str:
+        """Directory where the persistent BM25 artifact is stored."""
+        return str(Path(self.STORAGE_INDEX_PATH) / self.INDEX_SUBDIR)
 
 
 @lru_cache
