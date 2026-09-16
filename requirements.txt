@@ -20,9 +20,12 @@ trafilatura>=1.8.0
 rank-bm25>=0.2.2
 nltk>=3.8.1
 
-# Embeddings & Vector Search (Optional ML Baseline)
+# Embeddings & Vector Search (Phase 6 Semantic Search, local-only)
+# all-MiniLM-L6-v2 is downloaded/cached on first semantic operation; the model
+# (and faiss) are loaded lazily so BM25 search works even when these are absent.
 sentence-transformers>=2.5.0
 faiss-cpu>=1.8.0
+numpy>=1.26.0
 
 # Persistence & ORM
 psycopg2-binary>=2.9.9

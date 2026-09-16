@@ -36,10 +36,14 @@ services:
       - APP_NAME=${APP_NAME:-SEEK Search Engine}
       - APP_ENV=${APP_ENV:-development}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      # Local embedding-model cache (Phase 6); the all-MiniLM-L6-v2 download is
+      # persisted here so container rebuilds do not re-download it.
+      - HF_HOME=/app/.huggingface
     volumes:
       - ./backend:/app/backend
       - ./data:/app/data
       - ./indexes:/app/indexes
+      - ./.huggingface:/app/.huggingface
     depends_on:
       postgres:
         condition: service_healthy

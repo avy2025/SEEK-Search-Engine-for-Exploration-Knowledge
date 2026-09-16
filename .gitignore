@@ -56,3 +56,8 @@ data/*
 !data/.gitkeep
 indexes/*
 !indexes/.gitkeep
+
+# Local ML model cache (sentence-transformers / HuggingFace hub downloads)
+.huggingface/
+.hf_cache/
+backend/.cache/

@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     STORAGE_INDEX_PATH: str = "indexes"
     INDEX_SUBDIR: str = "bm25"
 
+    # --- Phase 6 Semantic Search (Local ML Embeddings) ---
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_BATCH_SIZE: int = 32
+    # Persistent FAISS artifact location (the directory holds the two files
+    # below, next to the Phase 5B ``bm25/`` subdir).
+    SEMANTIC_INDEX_PATH: str = "indexes"
+    FAISS_INDEX_FILE: str = "faiss_index.bin"
+    FAISS_METADATA_FILE: str = "faiss_metadata.json"
+
     # --- Phase 4 Controlled Web Crawler ---
     CRAWLER_ALLOWED_DOMAINS: str = ""
     CRAWLER_MAX_DEPTH: int = 2
@@ -51,6 +60,19 @@ class Settings(BaseSettings):
     def index_dir(self) -> str:
         """Directory where the persistent BM25 artifact is stored."""
         return str(Path(self.STORAGE_INDEX_PATH) / self.INDEX_SUBDIR)
+
+    @property
+    def semantic_index_dir(self) -> str:
+        """Directory where the persistent FAISS artifact is stored."""
+        return str(Path(self.SEMANTIC_INDEX_PATH))
+
+    @property
+    def faiss_index_path(self) -> str:
+        return str(Path(self.semantic_index_dir) / self.FAISS_INDEX_FILE)
+
+    @property
+    def faiss_metadata_path(self) -> str:
+        return str(Path(self.semantic_index_dir) / self.FAISS_METADATA_FILE)
 
 
 @lru_cache
