@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 6 (Semantic Search, Local ML Embeddings) - **COMPLETED**  
-> **Next Recommended Phase**: Phase 7 (Hybrid Ranking Engine)
+> **Current Phase**: Phase 7 (Hybrid Ranking Engine) - **COMPLETED**  
+> **Next Recommended Phase**: Phase 8 (AI / RAG Answer Generation)
 
 ---
 
@@ -76,10 +76,12 @@
 
 ---
 
-### [ ] Phase 7: Hybrid Ranking Engine
-- [ ] Implement candidate merging algorithm combining BM25 lexical and semantic vector candidates.
-- [ ] Implement weighted hybrid scoring formula ($\text{BM25} + \text{Semantic} + \text{Freshness} + \text{Authority}$).
-- [ ] Implement result deduplication and snippet highlighter.
+### [x] Phase 7: Hybrid Ranking Engine (COMPLETED)
+- [x] Implement candidate merging algorithm combining BM25 lexical and semantic vector candidates.
+- [x] Implement weighted hybrid scoring formula ($\text{Hybrid Score} = w_{\text{BM25}} \cdot \text{BM25}_{\text{norm}} + w_{\text{semantic}} \cdot \text{Semantic}_{\text{norm}}$) with deterministic Min-Max normalization.
+- [x] Implement document deduplication by canonical `document_id` and safe case-insensitive snippet term highlighter (`<mark>...</mark>`).
+- [x] Expose `mode=hybrid` endpoint (`GET /api/search?mode=hybrid&bm25_weight=...&semantic_weight=...`) with structured weights, explicit degraded/unavailable status reporting, and candidate limits.
+- [x] Phase 7 test suite (`tests/test_hybrid_phase7.py`) — **104 backend tests total pass**.
 
 ---
 

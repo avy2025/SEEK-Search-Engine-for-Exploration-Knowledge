@@ -135,15 +135,16 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 > writes, `FAISS_FORMAT_VERSION = 1`), and `backend/search/semantic.py` hosts
 > the `SemanticIndexManager` singleton (`rebuild`, change-detection `refresh`,
 > `load_on_startup`, cosine-similarity `search`, `status`). `GET /api/search` now
-> accepts `mode=lexical|bm25|semantic`; when the embedding stack or index is
-> unavailable the API returns a structured `semantic` status block (`unavailable`)
-> with `hits: []` and never silently falls back to BM25. Hybrid merging of the
-> two signal sources is Phase 7 (roadmap backlog).
+> accepts `mode=lexical|bm25|semantic|hybrid`; when the embedding stack or index is
+> unavailable the API returns structured status blocks (`unavailable`/`degraded`)
+> and never silently falls back to BM25 while claiming `mode=hybrid`.
 
-### 3.5 Ranking Engine (`backend/ranking/`)
-- Combines candidate sets using a weighted hybrid score:
-  $$\text{Score} = (w_1 \cdot \text{BM25}_{\text{norm}}) + (w_2 \cdot \text{Semantic}_{\text{sim}}) + (w_3 \cdot \text{Freshness}) + (w_4 \cdot \text{Authority})$$
-- Removes duplicate URLs and generates query-matched snippets.
+### 3.5 Ranking Engine (`backend/search/hybrid.py`)
+- Combines lexical (BM25) and vector (Semantic FAISS) candidate sets using a weighted hybrid score:
+  $$\text{Score}_{\text{hybrid}} = (w_{\text{BM25}} \cdot \text{BM25}_{\text{norm}}) + (w_{\text{semantic}} \cdot \text{Semantic}_{\text{norm}})$$
+- **Score Normalization Strategy**: Scores are scaled using deterministic Min-Max normalization ($s_{\text{norm}} = \frac{s - s_{\text{min}}}{s_{\text{max}} - s_{\text{min}}}$) per candidate component set. Equal score or single candidate sets map to 1.0 (or 0.0 if score <= 0.0). NaN/Infinity inputs are sanitized to 0.0.
+- **Candidate Merging & Deduplication**: Candidates from BM25 and Semantic indices are retrieved up to candidate limits (`HYBRID_BM25_CANDIDATES`, `HYBRID_SEMANTIC_CANDIDATES`), merged by canonical `document_id`, deduplicated, and ranked descending by hybrid score. Ties are broken deterministically by document ID.
+- **Query Term Highlighting**: Snippets preserve plain text safety and wrap matched terms case-insensitively in `<mark>...</mark>` tags while escaping raw HTML to prevent XSS.
 
 ### 3.6 Optional AI / RAG Layer (`backend/ai/`)
 - Formulates answers strictly using top-scoring retrieved passages as context.
