@@ -22,10 +22,16 @@ import time
 
 from fastapi import APIRouter, Query
 
+from backend.config import settings
 from backend.search.embeddings import EmbeddingUnavailableError
 from backend.search.engine import SearchEngine
+from backend.search.hybrid import (
+    InvalidHybridWeightsError,
+    merge_and_rerank_hybrid,
+    validate_and_normalize_weights,
+)
 from backend.search.index_manager import get_index_manager
-from backend.search.models import SearchResponse
+from backend.search.models import SearchResponse, SearchResult
 from backend.search.semantic import (
     get_semantic_index_manager,
 )
@@ -56,6 +62,113 @@ def _hits_payload(response: SearchResponse) -> list[dict[str, object]]:
         }
         for hit in response.hits
     ]
+
+
+def _hybrid_search(
+    q: str,
+    limit: int,
+    bm25_weight: float | None = None,
+    semantic_weight: float | None = None,
+) -> dict[str, object]:
+    """Hybrid mode: merge BM25 and Semantic candidates with score normalization."""
+    started = time.perf_counter()
+    bm25_manager = get_index_manager()
+    sem_manager = get_semantic_index_manager()
+
+    bm25_status = bm25_manager.status()
+    sem_status = dict(sem_manager.status())
+
+    bm25_avail = bool(bm25_manager.engine.document_count > 0 or bm25_status.get("loaded"))
+    sem_avail = bool(sem_status.get("available") and sem_status.get("loaded"))
+
+    try:
+        norm_w = validate_and_normalize_weights(bm25_weight, semantic_weight)
+    except InvalidHybridWeightsError as exc:
+        took_ms = round((time.perf_counter() - started) * 1000.0, 3)
+        return {
+            "query": q.strip(),
+            "total": 0,
+            "limit": limit,
+            "hits": [],
+            "took_ms": took_ms,
+            "message": f"invalid hybrid configuration: {exc}",
+            "mode": "hybrid",
+            "weights": {
+                "bm25": bm25_weight if bm25_weight is not None else settings.HYBRID_BM25_WEIGHT,
+                "semantic": semantic_weight if semantic_weight is not None else settings.HYBRID_SEMANTIC_WEIGHT,
+            },
+            "status": "error",
+        }
+
+    weights_dict = {"bm25": round(norm_w.bm25, 4), "semantic": round(norm_w.semantic, 4)}
+
+    payload: dict[str, object] = {
+        "query": q.strip(),
+        "total": 0,
+        "limit": limit,
+        "hits": [],
+        "took_ms": 0.0,
+        "message": "",
+        "mode": "hybrid",
+        "weights": weights_dict,
+        "bm25_status": bm25_status,
+        "semantic_status": sem_status,
+    }
+
+    if not bm25_avail and not sem_avail:
+        payload["message"] = "hybrid search unavailable: both BM25 and semantic indexes are not available"
+        payload["status"] = "unavailable"
+        payload["took_ms"] = round((time.perf_counter() - started) * 1000.0, 3)
+        return payload
+
+    if not bm25_avail:
+        payload["message"] = "hybrid search degraded/unavailable: BM25 index is not available"
+        payload["status"] = "degraded"
+        payload["took_ms"] = round((time.perf_counter() - started) * 1000.0, 3)
+        return payload
+
+    if not sem_avail:
+        sem_msg = str(sem_status.get("message") or "semantic index not loaded/available")
+        payload["message"] = f"hybrid search degraded/unavailable: {sem_msg}"
+        payload["status"] = "degraded"
+        payload["took_ms"] = round((time.perf_counter() - started) * 1000.0, 3)
+        return payload
+
+    cand_bm25_limit = max(limit, settings.HYBRID_BM25_CANDIDATES)
+    cand_sem_limit = max(limit, settings.HYBRID_SEMANTIC_CANDIDATES)
+
+    bm25_resp = bm25_manager.engine.search(q, limit=cand_bm25_limit, max_limit=100)
+
+    try:
+        sem_resp = sem_manager.search(q, limit=cand_sem_limit, max_limit=100)
+    except EmbeddingUnavailableError as exc:
+        payload["message"] = f"hybrid search degraded/unavailable: semantic search failed ({exc})"
+        payload["status"] = "degraded"
+        payload["took_ms"] = round((time.perf_counter() - started) * 1000.0, 3)
+        return payload
+
+    merged_hits, final_weights = merge_and_rerank_hybrid(
+        bm25_hits=bm25_resp.hits,
+        semantic_hits=sem_resp.hits,
+        query=q,
+        limit=limit,
+        bm25_weight=norm_w.bm25,
+        semantic_weight=norm_w.semantic,
+    )
+
+    payload["query"] = bm25_resp.query or q.strip()
+    payload["total"] = len(merged_hits)
+    payload["hits"] = _hits_payload(SearchResponse(
+        query=payload["query"],
+        total=len(merged_hits),
+        limit=limit,
+        hits=tuple(merged_hits),
+    ))
+    payload["took_ms"] = round((time.perf_counter() - started) * 1000.0, 3)
+    payload["message"] = "ok"
+    payload["status"] = "ok"
+    payload["weights"] = final_weights
+    return payload
 
 
 def _semantic_search(q: str, limit: int) -> dict[str, object]:
@@ -135,11 +248,15 @@ def search_documents(
     limit: int = Query(10, ge=1, le=50, description="Max hits to return"),
     mode: str = Query(
         "lexical",
-        pattern="^(lexical|bm25|semantic)$",
-        description="Search mode: lexical/bm25 (default) or semantic",
+        pattern="^(lexical|bm25|semantic|hybrid)$",
+        description="Search mode: lexical/bm25 (default), semantic, or hybrid",
     ),
+    bm25_weight: float | None = Query(None, ge=0.0, description="Optional BM25 hybrid weight"),
+    semantic_weight: float | None = Query(None, ge=0.0, description="Optional Semantic hybrid weight"),
 ) -> dict[str, object]:
     """Ranked hits for *q* in the requested mode (stable JSON envelope)."""
+    if mode == "hybrid":
+        return _hybrid_search(q, limit, bm25_weight, semantic_weight)
     if mode == "semantic":
         return _semantic_search(q, limit)
     return _lexical_search(q, limit)
