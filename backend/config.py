@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     FAISS_INDEX_FILE: str = "faiss_index.bin"
     FAISS_METADATA_FILE: str = "faiss_metadata.json"
 
+    # --- Phase 7 Hybrid Ranking Engine ---
+    HYBRID_BM25_WEIGHT: float = 0.5
+    HYBRID_SEMANTIC_WEIGHT: float = 0.5
+    HYBRID_BM25_CANDIDATES: int = 50
+    HYBRID_SEMANTIC_CANDIDATES: int = 50
+
     # --- Phase 4 Controlled Web Crawler ---
     CRAWLER_ALLOWED_DOMAINS: str = ""
     CRAWLER_MAX_DEPTH: int = 2
