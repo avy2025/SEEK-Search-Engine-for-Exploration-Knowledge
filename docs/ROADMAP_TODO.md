@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 7 (Hybrid Ranking Engine) - **COMPLETED**  
-> **Next Recommended Phase**: Phase 8 (AI / RAG Answer Generation)
+> **Current Phase**: Phase 8 (AI / RAG Answer Generation) - **COMPLETED**  
+> **Next Recommended Phase**: Phase 9 (Specialized Search Modes)
 
 ---
 
@@ -85,11 +85,12 @@
 
 ---
 
-### [ ] Phase 8: AI / RAG Answer Generation
-- [ ] Implement passage selector to pick top $K$ relevant context chunks.
-- [ ] Implement local/free LLM context prompt builder.
-- [ ] Expose `/api/answer` endpoint for AI synthesized answers with source citations.
-- [ ] Ensure full fallback to standard search if RAG is disabled or fails.
+### [x] Phase 8: AI / RAG Answer Generation (COMPLETED)
+- [x] Implement passage selector to pick top $K$ relevant context chunks with character caps.
+- [x] Implement local/free LLM context prompt builder and swappable `LLMProvider` abstraction (`FakeLLMProvider`, `OllamaLLMProvider`, `HuggingFaceLLMProvider`).
+- [x] Expose `POST /api/answer` endpoint for AI synthesized answers with source citations.
+- [x] Ensure full fallback to standard search hits if RAG is disabled, context is insufficient, or LLM fails/times out.
+- [x] Phase 8 test suite (`tests/test_rag_phase8.py`) — **118 backend tests total pass**.
 
 ---
 

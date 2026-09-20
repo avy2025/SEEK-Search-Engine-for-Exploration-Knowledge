@@ -147,9 +147,13 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 - **Query Term Highlighting**: Snippets preserve plain text safety and wrap matched terms case-insensitively in `<mark>...</mark>` tags while escaping raw HTML to prevent XSS.
 
 ### 3.6 Optional AI / RAG Layer (`backend/ai/`)
-- Formulates answers strictly using top-scoring retrieved passages as context.
-- Zero-cost architecture: supports local models or optional free-tier LLM API.
-- If AI component fails or is disabled, standard search results are returned seamlessly.
+- **Passage Selector (`backend/ai/pipeline.py`)**: Extracts top-K context chunks from candidate retrieval hits (hybrid/lexical/semantic), enforces character caps (`RAG_MAX_CONTEXT_CHARS=3000`), strips snippet markup tags, and deduplicates source documents.
+- **Grounded Prompt Builder**: Formulates strict instruction prompts compelling the model to answer *only* using supplied sources, cite inline source IDs (`[1]`, `[2]`), and state insufficient context when information is missing.
+- **LLM Provider Abstraction (`backend/ai/providers.py`)**: Modular `LLMProvider` interface supporting:
+  - `FakeLLMProvider`: Deterministic mock provider for offline tests and zero-dependency CI runs.
+  - `OllamaLLMProvider`: Local Ollama HTTP API endpoint (`http://localhost:11434`).
+  - `HuggingFaceLLMProvider`: Local CPU/GPU PyTorch transformers pipeline (`Qwen/Qwen2.5-0.5B-Instruct`).
+- **Endpoint & Fallback (`POST /api/answer`)**: Synthesizes grounded answers with source citations. If RAG is disabled, context is insufficient (top score < 0.15 or zero hits), or the LLM provider fails/times out, the endpoint returns a structured fallback envelope containing standard search hits.
 
 ---
 
