@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     HYBRID_BM25_CANDIDATES: int = 50
     HYBRID_SEMANTIC_CANDIDATES: int = 50
 
+    # --- Phase 8 AI / RAG Answer Generation ---
+    RAG_ENABLED: bool = True
+    RAG_LLM_PROVIDER: str = "fake"  # options: "fake", "ollama", "transformers"
+    RAG_OLLAMA_HOST: str = "http://localhost:11434"
+    RAG_OLLAMA_MODEL: str = "qwen2.5:0.5b"
+    RAG_TRANSFORMERS_MODEL: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    RAG_MAX_PASSAGES: int = 5
+    RAG_MAX_CONTEXT_CHARS: int = 3000
+    RAG_MIN_SCORE_THRESHOLD: float = 0.15
+    RAG_LLM_TIMEOUT_SECONDS: float = 10.0
+    RAG_TEMPERATURE: float = 0.2
+
     # --- Phase 4 Controlled Web Crawler ---
     CRAWLER_ALLOWED_DOMAINS: str = ""
     CRAWLER_MAX_DEPTH: int = 2
