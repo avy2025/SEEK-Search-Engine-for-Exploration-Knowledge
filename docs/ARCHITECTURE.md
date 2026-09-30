@@ -63,8 +63,20 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 > homepage with a prominent search bar, sample queries, real ranked results
 > (title/source/snippet/score/rank/matched terms), full loading / empty / error
 > states, URL-query sync (`/?q=…`), a configurable API base URL
-> (`VITE_API_BASE_URL`), and health polling. Mode selectors and AI answers are
-> roadmap backlog (Phases 7–9).
+> (`VITE_API_BASE_URL`), and health polling.
+
+> **Implemented (Phase 9)**: the specialized search modes are wired end to end.
+> `src/lib/modes.ts` mirrors the backend enum, `src/lib/urlState.ts` holds the
+> pure `parseSearchState` / `buildSearchPath` pair that keeps `?q=…&mode=…` in
+> the URL (deep links, refresh and back/forward), and
+> `src/components/ModeSelector.tsx` renders the four modes as an ARIA
+> `radiogroup` with roving `tabindex` and Arrow/Home/End keys.
+> `SearchResults.tsx` composes the mode-specific view: an explicit
+> degraded/unavailable banner, `AnswerPanel` (grounded AI answer / research
+> synthesis, or an explicit "no answer could be generated" note),
+> `SourcesPanel` (cited sources), and `ResultCard`s that render the code excerpt
+> supplied by Code Docs. The UI never invents data: every field is taken from the
+> backend envelope.
 
 ### 3.2 API Layer (`backend/api/`)
 - **Framework**: FastAPI (ASGI)
@@ -78,6 +90,7 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
   - `POST /api/index/semantic/rebuild`: Rebuild the FAISS semantic index from PostgreSQL.
   - `POST /api/index/semantic/refresh`: Incremental change detection for the FAISS semantic index.
   - `GET /api/index/status`: Persistent-index health and staleness status (BM25 + semantic).
+  - `GET /api/search/modes`: Machine-readable catalog of the specialized search modes.
   - `POST /api/answer`: Generate RAG answer based on retrieved documents.
 
 > **Implemented (Phases 4–6)**: `GET /health`, `GET /` (service meta),
@@ -91,6 +104,17 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 > `tests/test_index_persistence_phase5b.py`,
 > `tests/test_semantic_search_phase6.py`).
 > `POST /api/answer` (RAG) remains roadmap backlog.
+
+> **Implemented (Phases 7–9)**: `GET /api/search` additionally accepts
+> `mode=hybrid` (Phase 7) and the specialized modes `web|ai|research|code`
+> (Phase 9), `GET /api/search/modes` serves the mode catalog, and `POST
+> /api/answer` (Phase 8 RAG) is live. `backend/api/search.py` keeps the legacy
+> handlers (`_lexical_search`, `_semantic_search`, `_hybrid_search`) untouched
+> and validates the `mode` parameter through the controlled enum in
+> `backend/search/modes.py`; an unknown mode is rejected with HTTP 422
+> (`detail.error = "invalid_search_mode"`). Mode execution is delegated to
+> `backend/api/mode_orchestrator.py`, which composes the existing handlers and
+> the Phase 8 RAG pipeline rather than re-implementing retrieval.
 
 ### 3.3 Content & Crawler Pipeline (`backend/crawler/`, `backend/processing/`)
 - **Tools**: `httpx`, `asyncio`, `BeautifulSoup4`, `urllib.robotparser`
@@ -154,6 +178,52 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
   - `OllamaLLMProvider`: Local Ollama HTTP API endpoint (`http://localhost:11434`).
   - `HuggingFaceLLMProvider`: Local CPU/GPU PyTorch transformers pipeline (`Qwen/Qwen2.5-0.5B-Instruct`).
 - **Endpoint & Fallback (`POST /api/answer`)**: Synthesizes grounded answers with source citations. If RAG is disabled, context is insufficient (top score < 0.15 or zero hits), or the LLM provider fails/times out, the endpoint returns a structured fallback envelope containing standard search hits.
+
+### 3.7 Specialized Search Modes (`backend/search/modes.py`, `backend/api/mode_orchestrator.py`)
+
+Phase 9 adds four user-facing search modes as a thin **orchestration layer** over
+the retrieval and RAG components above. No scoring, indexing or embedding logic
+is duplicated: modes only choose *which* existing service to call and *how* to
+arrange its output.
+
+- **Mode Registry (`backend/search/modes.py`)**: a controlled `SearchMode` enum
+  (`web`, `ai`, `research`, `code`) plus a `ModeSpec` describing, per mode, the
+  retrieval strategy, ranking weights, result limits, candidate widening, RAG
+  toggle, snippet behaviour, source diversification and documentation/code
+  handling. Every knob is read from the centralised `MODE_*` / `RESEARCH_*` /
+  `CODE_*` settings, so deployments retune modes without code changes.
+  `normalize_mode_param()` also accepts the legacy retrieval modes and raises
+  `InvalidSearchModeError` for anything else.
+- **Orchestrator (`backend/api/mode_orchestrator.py`)**: `execute_search_mode()`
+  probes index availability, delegates retrieval to `_hybrid_search` /
+  `_semantic_search` / `_lexical_search` (with the mode's candidate width and
+  weights), applies the deterministic post-processing helpers, and — for the RAG
+  modes — hands the *already retrieved* hits to `generate_rag_answer()` so
+  retrieval never runs twice.
+- **Response envelope**: every mode returns
+  `{query, mode, status, total, limit, hits, took_ms, message, answer, sources, metadata}`.
+  `status` is `ok`, `degraded` (a preferred capability was missing and a fallback
+  was served) or `unavailable` (nothing could be served). Retrieval health always
+  wins over the RAG outcome, and every fallback is spelled out in `message` and
+  `metadata.degraded_reason` — retrieval failures are never hidden.
+- **Honest matching**: the BM25/hybrid pipeline pads its candidate list with
+  `0.0`-scored documents. `drop_unmatched_hits()` removes them from the
+  specialized-mode envelope (`MODE_MATCH_SCORE_FLOOR`), so `total` reflects real
+  matches instead of ranking padding. The legacy retrieval modes keep their
+  original behaviour.
+- **Mode behaviour**:
+  - `web` — hybrid retrieval, ranked results, no generated answer.
+  - `ai` — hybrid retrieval plus a Phase 8 grounded answer with citations.
+  - `research` — wider candidate retrieval (`RESEARCH_CANDIDATE_MULTIPLIER`),
+    per-host source diversification, richer snippets, and a labelled distinction
+    between `metadata.evidence` (`retrieved_evidence`) and `metadata.synthesis`
+    (`generated_synthesis`).
+  - `code` — lexical-leaning weights (`CODE_BM25_WEIGHT` > `CODE_SEMANTIC_WEIGHT`),
+    technical identifier expansion, documentation-source *prioritisation* (a
+    preference, never a filter) and code excerpts extracted from documents SEEK
+    already indexed. It adds no crawler and calls no external API.
+- **No fabrication**: `answer` is `null` whenever the RAG pipeline falls back,
+  and snippets/code excerpts are re-rendered from indexed document content only.
 
 ---
 

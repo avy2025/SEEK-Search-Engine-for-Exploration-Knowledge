@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 8 (AI / RAG Answer Generation) - **COMPLETED**  
-> **Next Recommended Phase**: Phase 9 (Specialized Search Modes)
+> **Current Phase**: Phase 9 (Specialized Search Modes) - **COMPLETED**  
+> **Next Recommended Phase**: Phase 10 (Automated Testing Suite)
 
 ---
 
@@ -94,9 +94,15 @@
 
 ---
 
-### [ ] Phase 9: Specialized Search Modes
-- [ ] Add mode filter UI toggles (Web Search, AI Answers, Research Mode, Code Docs).
-- [ ] Implement backend mode-specific scoring weights and query intent handlers.
+### [x] Phase 9: Specialized Search Modes (COMPLETED)
+- [x] Define the controlled mode enum + `ModeSpec` registry in `backend/search/modes.py` (`web`, `ai`, `research`, `code`) with case-insensitive validation and a clean HTTP 422 for unknown values.
+- [x] Add the orchestration layer `backend/api/mode_orchestrator.py` that delegates to the existing BM25/semantic/hybrid handlers and the Phase 8 RAG pipeline — no duplicated retrieval or scoring.
+- [x] Expose the modes on `GET /api/search` through one explicit envelope (`{query, mode, status, total, limit, hits, took_ms, message, answer, sources, metadata}`) with `ok` / `degraded` / `unavailable` status.
+- [x] Implement backend mode-specific ranking behaviour: candidate widening, lexical-leaning Code Docs weights, documentation-source priority, technical identifier expansion, source diversification and richer snippets — all reading centralised `MODE_*` / `RESEARCH_*` / `CODE_*` settings.
+- [x] Publish the machine-readable mode catalog at `GET /api/search/modes`.
+- [x] Add the polished, responsive, keyboard-accessible mode selector to the React UI, with the mode persisted in the URL (`?q=python&mode=research`) and back/forward navigation honoured.
+- [x] Add mode-specific result rendering: grounded answer panel, cited sources panel, code excerpts, and explicit degraded/unavailable banners (nothing fabricated).
+- [x] Phase 9 test suite (`tests/test_search_modes_phase9.py`, 108 tests covering items A–P) plus the frontend URL-state suite (`npm run test:urlstate`) — **226 tests pass**.
 
 ---
 

@@ -8,6 +8,9 @@
 [![Phase 4: Crawler](https://img.shields.io/badge/Phase%204-Controlled%20Crawler-Completed-brightgreen.svg)]()
 [![Phase 5: Persistent Index](https://img.shields.io/badge/Phase%205-Persistent%20Indexing-Completed-brightgreen.svg)]()
 [![Phase 6: Semantic Search](https://img.shields.io/badge/Phase%206-Semantic%20Search-Completed-brightgreen.svg)]()
+[![Phase 7: Hybrid Ranking](https://img.shields.io/badge/Phase%207-Hybrid%20Ranking-Completed-brightgreen.svg)]()
+[![Phase 8: RAG Answers](https://img.shields.io/badge/Phase%208-AI%20Answers-Completed-brightgreen.svg)]()
+[![Phase 9: Search Modes](https://img.shields.io/badge/Phase%209-Specialized%20Modes-Completed-brightgreen.svg)]()
 [![Stack: FastAPI + React + Docker](https://img.shields.io/badge/Stack-FastAPI%20%7C%20React%20%7C%20Docker-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
@@ -23,8 +26,8 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## 🚦 Current Project Status
 
-- **Phases 1–6**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler · Persistent Indexing Pipeline · Semantic Search (Local ML Embeddings)
-- **Next Phase**: **Phase 7 — Hybrid Ranking Engine** `[UPCOMING]`
+- **Phases 1–9**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler · Persistent Indexing Pipeline · Semantic Search (Local ML Embeddings) · Hybrid Ranking · AI/RAG Answers · Specialized Search Modes
+- **Next Phase**: **Phase 10 — Automated Testing Suite** `[UPCOMING]`
 
 ---
 
@@ -279,62 +282,219 @@ guarantee that the existing BM25 lexical mode keeps working exactly as before:
 
 ---
 
+## ✅ PHASE 7 COMPLETE FEATURES (Hybrid Ranking Engine)
+
+Phase 7 merges the lexical (BM25) and vector (FAISS semantic) candidate sets into
+a single ranked list, exposed as `GET /api/search?q=…&mode=hybrid`:
+
+1. **Weighted hybrid score** (`backend/search/hybrid.py`): deterministic
+   min–max normalisation per candidate component, combined as
+   `w_bm25·BM25_norm + w_semantic·Semantic_norm`
+   (`HYBRID_BM25_WEIGHT` / `HYBRID_SEMANTIC_WEIGHT`, default 0.5/0.5).
+2. **Merge & dedupe**: candidates merged by canonical `document_id`, deduplicated,
+   ranked descending, ties broken deterministically by document ID.
+3. **Weight validation**: invalid or NaN/Infinity weights are rejected with an
+   explicit `status: "error"` payload instead of silently defaulting.
+4. **No hidden fallback**: when one index is unavailable the response reports
+   `status: "degraded"` / `"unavailable"` and explains which side failed.
+
+---
+
+## ✅ PHASE 8 COMPLETE FEATURES (AI / RAG Answer Generation)
+
+Phase 8 adds source-grounded answer synthesis via `POST /api/answer`:
+
+1. **Passage selector** (`backend/ai/pipeline.py`): top-K context chunks from the
+   retrieved hits, deduplicated by document, capped by `RAG_MAX_CONTEXT_CHARS`.
+2. **Grounded prompt builder**: strict instructions to answer only from the
+   supplied sources, cite them inline as `[1]`, `[2]`, … and declare insufficient
+   context otherwise.
+3. **Swappable `LLMProvider`s** (`backend/ai/providers.py`): `FakeLLMProvider`
+   (deterministic, offline), `OllamaLLMProvider` (local HTTP) and
+   `HuggingFaceLLMProvider` (local transformers) — **no paid API**.
+4. **Explicit fallback**: RAG disabled, insufficient context (top score below
+   `RAG_MIN_SCORE_THRESHOLD`) or provider failure/timeout all yield a structured
+   fallback carrying the plain search hits and `fallback_mode: true`.
+
+---
+
+## ✅ PHASE 9 COMPLETE FEATURES (Specialized Search Modes)
+
+Phase 9 turns SEEK into four purpose-built search experiences — **Web Search**,
+**AI Answers**, **Research** and **Code Docs** — as a thin **orchestration
+layer** over the retrieval and RAG services built in Phases 2–8. No BM25,
+semantic, hybrid or RAG logic is duplicated; a mode only chooses which existing
+service to call and how to arrange its output.
+
+1. **Mode registry** (`backend/search/modes.py`) — a controlled `SearchMode`
+   enum plus a `ModeSpec` per mode (retrieval strategy, ranking weights, result
+   limits, candidate widening, RAG toggle, snippet behaviour, source
+   diversification, documentation priority). Every knob is read from the
+   centralised `MODE_*` / `RESEARCH_*` / `CODE_*` settings in
+   `backend/config.py` — no magic numbers in the mode layer.
+
+2. **Orchestrator** (`backend/api/mode_orchestrator.py`) — probes index
+   availability, delegates retrieval to the existing `_hybrid_search` /
+   `_semantic_search` / `_lexical_search` handlers with the mode's candidate
+   width and weights, applies the deterministic post-processing helpers, and for
+   the RAG modes hands the *already retrieved* hits to `generate_rag_answer()`
+   so retrieval never runs twice.
+
+3. **One explicit envelope.** Every mode returns
+   `{query, mode, status, total, limit, hits, took_ms, message, answer, sources, metadata}`:
+   - `status` is **`ok`**, **`degraded`** (a preferred capability was missing and
+     a fallback was served) or **`unavailable`** (nothing could be served);
+   - retrieval health always wins over the RAG outcome;
+   - every fallback is spelled out in `message` and `metadata.degraded_reason` —
+     **retrieval failures are never hidden**;
+   - an installed-but-empty index is reported as `unavailable`, not as an empty
+     result set.
+
+4. **Validated mode parameter.** `mode` accepts the legacy retrieval modes
+   (`lexical|bm25|semantic|hybrid`) plus `web|ai|research|code`, case-insensitively.
+   Anything else returns a clean **HTTP 422** with
+   `detail.error = "invalid_search_mode"` and the list of allowed values.
+   The legacy contracts are untouched: `GET /api/search?q=python` still returns
+   exactly its Phase 2 payload.
+
+5. **Mode behaviour**
+   - **`web`** — broad hybrid retrieval, ranked results, no generated answer.
+   - **`ai`** — hybrid retrieval plus a Phase 8 grounded answer with citations.
+   - **`research`** — wider candidate retrieval
+     (`RESEARCH_CANDIDATE_MULTIPLIER`), per-host source diversification,
+     richer snippets, and a labelled separation between retrieved evidence
+     (`metadata.evidence.kind = "retrieved_evidence"`) and generated synthesis
+     (`metadata.synthesis.kind = "generated_synthesis"`).
+   - **`code`** — lexical-leaning weights (`CODE_BM25_WEIGHT` 0.7 vs
+     `CODE_SEMANTIC_WEIGHT` 0.3), technical identifier expansion
+     (`faiss_store.SearchEngine` → also `faiss store search engine`),
+     documentation-source **prioritisation** (a preference, never a filter) and
+     code excerpts extracted from documents SEEK already indexed. **No external
+     crawler and no third-party API** are added.
+
+6. **Honest matching.** The BM25/hybrid pipeline pads its candidate list with
+   `0.0`-scored documents; `drop_unmatched_hits()` removes them from the
+   specialized-mode envelope so `total` reflects genuine matches
+   (`MODE_MATCH_SCORE_FLOOR`). `answer` is `null` whenever RAG falls back —
+   SEEK never invents text.
+
+7. **Mode catalog** (`GET /api/search/modes`) — machine-readable description of
+   every mode: label, retrieval strategy, limits, weights and capabilities.
+
+8. **Mode-aware UI** (`frontend/`)
+   - `src/components/ModeSelector.tsx` — polished, responsive, keyboard
+     accessible ARIA `radiogroup` (roving `tabindex`, Arrow/Home/End keys).
+   - `src/lib/urlState.ts` — pure `parseSearchState` / `buildSearchPath`, so the
+     mode lives in the URL (`/?q=python&mode=research`): shareable, survives a
+     refresh, and honours back/forward navigation.
+   - `AnswerPanel.tsx` / `SourcesPanel.tsx` / `ResultCard.tsx` — grounded answer
+     (or an explicit "no answer could be generated" note), cited sources, code
+     excerpts, and a degraded/unavailable banner. Nothing is rendered that the
+     backend did not send.
+
+9. **Verification** — `tests/test_search_modes_phase9.py` (108 tests, checklist
+   items A–P) plus the frontend suite `npm run test:urlstate`.
+   **226 tests pass** (`pytest -q`), probe 18/18, `npm run build` and
+   `tsc --noEmit` clean.
+
+Try it live:
+
+```bash
+curl -s "http://localhost:8000/api/search/modes" | python -m json.tool
+curl -s "http://localhost:8000/api/search?q=python&mode=research" | python -m json.tool
+curl -s "http://localhost:8000/api/search?q=SearchEngine&mode=code" | python -m json.tool
+curl -s -i "http://localhost:8000/api/search?q=python&mode=bogus"   # 422 invalid_search_mode
+```
+
+---
+
 ## ❌ NOT YET IMPLEMENTED
 
 To keep the development scope clean and strictly phase-aligned, the following components are **NOT** yet implemented:
 
-- ❌ Multi-Signal Hybrid Ranker (Phase 7)
-- ❌ AI / RAG Answer Generation (Phase 8)
+- ❌ Consolidated Automated Testing Suite & CI hardening (Phase 10)
+- ❌ Advanced ranking signals / learning-to-rank (Phase 11+)
+- ❌ User accounts, saved searches and personalization (Phase 12+)
+- ❌ Horizontal scaling / multi-node index sharding (Phase 13+)
+- ❌ Public deployment, observability stack and hardening (Phase 14)
 
 ---
 
 ## 🏗️ System Architecture
 
 ```
-                                   +---------------------------------------+
-                                   |         React + Vite UI (Phase 3)     |
-                                   |      Search box + ranked results      |
-                                   |      (Port 3000 / Nginx Container)    |
-                                   +-------------------+-------------------+
-                                                        |
-                                                        |  HTTP / REST
-                                                        v
-                                   +---------------------------------------+
-                                   |          FastAPI Gateway              |
-                                   |     (Port 8000 / Uvicorn Container)   |
-                                   +---------+-----------------+-----------+
-                                             |                 |
-                                             v                 v
-                                    +----------------+ +------------------+
-                                    |  GET /health   | |  GET /           |
-                                    | (Health Check) | | (System Meta)    |
-                                    +----------------+ +------------------+
-                                             |
-                                             v
-+--------------------------------------------+
-|  /api/search (lexical | semantic)           |
-                            |  /api/crawl (jobs)                          |
-                            |  /api/index/rebuild | refresh | status       |
-                            |  /api/index/semantic/rebuild | refresh        |
-                            +-------------------+------------------------+
-                                                |
-                            +-------------------+------------------------+
-                            |                                          |
-                            v                                          v
-           +---------------------------------+             +-----------------------+
-           |  Crawler pipeline (Phase 4)     |------\     |  BM25 engine (Phase 5)|
-           |  seeds -> robots -> fetch ->    |       \    |  canonical: PostgreSQL|
-           |  extract -> chunk -> dedup      |        \   |  artifact: indexes/    |
-           +---------------------------------+         \  |  bm25/index.pkl        |
-                                                        \ +-----------------------+
-                                                         \
-                                                          \  +-----------------------+
-                                                           \ |  Semantic engine (6)  |
-                                                            \|  FAISS IndexFlatIP    |
-                                                             |  artifact: indexes/   |
-                                                             |  faiss_index.bin      |
-                                                             +-----------------------+
+
+   +---------------------------------------+
+   |        React + Vite UI (Phase 3)      |
+   | Search box + mode selector (Phase 9)  |
+   | results / answers / sources panels    |
+   |     (Port 3000 / Nginx Container)     |
+   +-------------------+-------------------+
+
+                       |  HTTP / REST
+                       v
+
+   +---------------------------------------+
+   |          FastAPI Gateway              |
+   |     (Port 8000 / Uvicorn Container)   |
+   +---------+-------------------+---------+
+
+             |                   |
+
++----------------+ +------------------+
+|  GET /health   | |  GET /           |
+| (Health Check) | | (System Meta)    |
++----------------+ +------------------+
+             |
+             v
+
++---------------------------------------------------------------------+
+|  GET /api/search?mode=bm25|semantic|hybrid|web|ai|research|code     |
+|  GET /api/search/modes   |   POST /api/answer (Phase 8)             |
+|  /api/crawl (jobs)       |   /api/index/{rebuild,refresh,status}    |
+|  /api/index/semantic/{rebuild,refresh}                              |
++--------------+----------------------------+-------------------------+
+
+               |                            |
+
+   +----------------------------+     +---------------------------+
+   | Search-mode orchestrator   |     | Crawler pipeline (Phase 4) |
+   | api/mode_orchestrator (9)  |     | seeds -> robots -> fetch  |
+   | search/modes.py (9)        |     | extract -> chunk -> dedup |
+   | limits / weights / post-proc|    | seeds the canonical corpus|
+   +-----------+----------------+     +-----+---------------------+
+
+               |                            |
+               v                            v
+
++--------------+----------------------------+-------------------------+
+| Retrieval + ranking services shared by every mode (reuse, no fork)    |
+|   BM25 (Phase 5)  |  semantic + FAISS (6)  |  hybrid fusion (7)       |
+|   RAG answer engine (Phase 8, optional synthesis layer)              |
++--------------+----------------------------+-------------------------+
+
+               |                            |
+               v                            v
+
+   +----------------------------+     +---------------------------+
+   | BM25 engine (Phase 5)      |     | Semantic engine (Phase 6) |
+   | canonical: PostgreSQL      |     | FAISS IndexFlatIP         |
+   | artifact: indexes/         |     | artifact: indexes/        |
+   | bm25/index.pkl             |     | faiss_index.bin           |
+   +----------------------------+     +---------------------------+
+
 ```
+
+> **Search modes are an orchestration layer, not a parallel retrieval stack
+> (Phase 9).** The `web`, `ai`, `research` and `code` modes reuse exactly the same
+> BM25, semantic, hybrid and RAG services as the legacy `bm25`, `semantic` and
+> `hybrid` modes. A mode only changes the result limit, candidate widening,
+> ranking weights, source prioritisation and post-processing applied on top of
+> those shared services. Mode definitions live in `backend/search/modes.py`;
+> execution, availability probing and status reporting live in
+> `backend/api/mode_orchestrator.py`. No mode ever hides a retrieval failure —
+> each response carries an explicit `status` of `ok`, `degraded` or
+> `unavailable`.
 
 ---
 
@@ -480,12 +640,54 @@ To verify that the Phase 1 backend service and health checks are functioning cor
    from `indexes/faiss_index.bin` (`source=persistent_faiss_index`) without
    re-embedding, and the model loads lazily on first semantic query.
 
+7. **Phase 7 Hybrid Ranking Smoke Test**:
+   ```bash
+   curl -s "http://localhost:8000/api/search?q=docker&mode=hybrid" | python -m json.tool
+   ```
+   Expected: `mode=hybrid` with a `metadata.hybrid` block reporting the fusion
+   weights used (`WEIGHT_BM25` / `WEIGHT_SEMANTIC` / `WEIGHT_FRESHNESS` /
+   `WEIGHT_AUTHORITY`) and per-hit score provenance; the legacy
+   `/api/search?q=<term>` without `mode` still behaves exactly as before.
+
+8. **Phase 8 AI Answer Smoke Test** (no paid API required):
+   ```bash
+   curl -s -X POST http://localhost:8000/api/answer \
+     -H "content-type: application/json" \
+     -d '{"query":"what is a container","top_k":5}' | python -m json.tool
+   ```
+   Expected: an `answer` string plus `sources` and `passages` when the optional
+   LLM provider is configured; otherwise `answer=null` with an explicit
+   `rag.status=unavailable` (or `degraded`) reason. Retrieval failures are never
+   hidden and an answer is never fabricated.
+
+9. **Phase 9 Specialized Search Modes Smoke Test**:
+   ```bash
+   # Discover the available modes
+   curl -s http://localhost:8000/api/search/modes | python -m json.tool
+   # Each specialized mode
+   for m in web ai research code; do
+     curl -s "http://localhost:8000/api/search?q=python&mode=$m" | python -m json.tool
+   done
+   # Invalid mode -> HTTP 422
+   curl -i "http://localhost:8000/api/search?q=python&mode=nope"
+   ```
+   Expected: each response echoes `mode`, a `status` of `ok` / `degraded` /
+   `unavailable`, and mode-specific payloads (`answer` for `ai`, `sources` for
+   `research`, code snippets for `code`). `?q=python&mode=nope` returns
+   **HTTP 422** with `detail.code = "invalid_search_mode"`. An unknown mode never
+   falls back silently to a different mode.
+
+   Then open [http://localhost:3000](http://localhost:3000) and confirm the mode
+   selector switches between **Web / AI / Research / Code**, the address bar keeps
+   `?q=python&mode=research`, browser back/forward restores the previous mode, and
+   the Research and Code modes render their source / snippet panels.
+
 ---
 
 ## 🔮 Next Planned Phase
 
-**Phase 7: Hybrid Ranking Engine** (merge BM25 lexical and FAISS semantic
-candidates into a single weighted ranking)
+**Phase 10: Consolidated Automated Testing Suite & CI hardening** (one entry
+point that runs backend, frontend and acceptance checks in CI on every push)
 
 ---
 

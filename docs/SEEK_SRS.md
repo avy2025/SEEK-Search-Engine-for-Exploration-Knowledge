@@ -214,6 +214,16 @@ The complete product is intentionally divided into stages so each stage can be d
 - **FR-22 (API Docs)**: Development API documentation shall be available.
 - **FR-23 (Errors)**: Invalid requests and dependency failures shall be handled cleanly.
 - **FR-24 (Logging)**: Core components shall create useful logs.
+- **FR-25 (Specialized Modes)**: System shall offer four specialized search modes — Web Search, AI Answers, Research and Code Docs — selectable by the user.
+- **FR-26 (Mode Validation)**: The `mode` parameter shall be validated against a controlled set; an unsupported value shall be rejected with a clean HTTP 422.
+- **FR-27 (Mode Reporting)**: Every specialized-mode response shall report the executed mode and an explicit status (`ok`, `degraded` or `unavailable`).
+- **FR-28 (Mode Transparency)**: Retrieval fallbacks (e.g. hybrid → lexical) shall be reported explicitly rather than hidden.
+- **FR-29 (Grounding)**: Generated answers shall be grounded in retrieved SEEK sources; no answer shall be fabricated, and `answer` shall be `null` when none could be grounded.
+- **FR-30 (Evidence Separation)**: Research mode shall distinguish retrieved evidence from generated synthesis.
+- **FR-31 (Code Docs Scope)**: Code Docs shall operate exclusively on documents SEEK already indexed; it shall not add an external crawler or third-party API.
+- **FR-32 (Mode Persistence)**: The selected mode shall be reflected in the URL so results are shareable and survive refresh and back/forward navigation.
+- **FR-33 (Mode Accessibility)**: The mode selector shall be keyboard operable and expose appropriate accessibility semantics.
+- **FR-34 (Mode Compatibility)**: Specialized modes shall not alter the pre-existing retrieval mode contracts.
 
 ---
 
@@ -230,6 +240,9 @@ The complete product is intentionally divided into stages so each stage can be d
 - **NFR-10 (Extensibility)**: Embedding, vector and AI providers should be replaceable.
 - **NFR-11 (Observability)**: Logs and health checks shall support troubleshooting.
 - **NFR-12 (Reproducibility)**: Dependencies and container configuration shall be documented.
+- **NFR-13 (Configuration)**: Mode behaviour (limits, weights, diversification, snippet sizes) shall be driven by centralized configuration rather than hard-coded values.
+- **NFR-14 (No Duplication)**: Specialized modes shall reuse the existing retrieval, ranking and RAG services rather than reimplementing them.
+- **NFR-15 (Offline Testability)**: The Phase 9 test suite shall run without paid APIs, external model downloads or a live database.
 
 ---
 
