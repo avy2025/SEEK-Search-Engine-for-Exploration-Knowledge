@@ -15,13 +15,23 @@ Phase 6 adds the ``mode`` parameter:
   same envelope with ``hits: []`` and a structured ``semantic`` status block —
   it never silently falls back to BM25, so callers can tell "semantic
   unavailable" from "semantic returned zero results".
+
+Phase 7 adds ``hybrid`` (merged BM25 + semantic candidates).
+
+Phase 9 adds the **specialized modes** ``web``, ``ai``, ``research`` and
+``code``. They are an orchestration layer over the handlers above (see
+:mod:`backend.search.modes` and :mod:`backend.api.mode_orchestrator`) and are
+validated through a controlled enum; an unknown mode is rejected with a clean
+HTTP 422. Legacy modes keep their original response contracts byte-for-byte.
 """
+
 from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status as http_status
 
+from backend.api.mode_orchestrator import execute_search_mode
 from backend.config import settings
 from backend.search.embeddings import EmbeddingUnavailableError
 from backend.search.engine import SearchEngine
@@ -31,6 +41,13 @@ from backend.search.hybrid import (
     validate_and_normalize_weights,
 )
 from backend.search.index_manager import get_index_manager
+from backend.search.modes import (
+    LEGACY_SEARCH_MODES,
+    InvalidSearchModeError,
+    mode_catalog,
+    normalize_mode_param,
+    try_parse_search_mode,
+)
 from backend.search.models import SearchResponse, SearchResult
 from backend.search.semantic import (
     get_semantic_index_manager,
@@ -245,28 +262,87 @@ def _lexical_search(q: str, limit: int) -> dict[str, object]:
 @router.get("", name="search")
 def search_documents(
     q: str = Query(..., min_length=1, description="Free-text query"),
-    limit: int = Query(10, ge=1, le=50, description="Max hits to return"),
+    limit: int | None = Query(
+        None,
+        ge=1,
+        le=50,
+        description=(
+            "Max hits to return. Omit to use the mode default "
+            f"(lexical={settings.SEARCH_DEFAULT_LIMIT}); ignored beyond the "
+            f"per-mode cap of {settings.MODE_MAX_LIMIT}."
+        ),
+    ),
     mode: str = Query(
         "lexical",
-        pattern="^(lexical|bm25|semantic|hybrid)$",
-        description="Search mode: lexical/bm25 (default), semantic, or hybrid",
+        description=(
+            "Retrieval mode (lexical|bm25|semantic|hybrid — Phase 2/6/7) or "
+            "specialized mode (web|ai|research|code — Phase 9)"
+        ),
     ),
     bm25_weight: float | None = Query(None, ge=0.0, description="Optional BM25 hybrid weight"),
     semantic_weight: float | None = Query(None, ge=0.0, description="Optional Semantic hybrid weight"),
 ) -> dict[str, object]:
-    """Ranked hits for *q* in the requested mode (stable JSON envelope)."""
-    if mode == "hybrid":
-        return _hybrid_search(q, limit, bm25_weight, semantic_weight)
-    if mode == "semantic":
-        return _semantic_search(q, limit)
-    return _lexical_search(q, limit)
+    """Ranked hits for *q* in the requested mode (stable JSON envelope).
+
+    ``lexical|bm25|semantic|hybrid`` keep their Phase 2/6/7 contracts.
+    ``web|ai|research|code`` (Phase 9) return the specialized envelope
+    ``{query, mode, status, hits, answer, sources, metadata, ...}``.
+    """
+    try:
+        normalized_mode = normalize_mode_param(mode)
+    except InvalidSearchModeError as exc:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "invalid_search_mode",
+                "mode": mode,
+                "allowed": list(exc.allowed),
+                "message": str(exc),
+            },
+        ) from exc
+
+    specialized = try_parse_search_mode(normalized_mode)
+    if specialized is not None:
+        return execute_search_mode(
+            query=q,
+            mode=specialized,
+            limit=limit,
+            bm25_weight=bm25_weight,
+            semantic_weight=semantic_weight,
+        )
+
+    # Legacy retrieval modes: original behaviour and payload, unchanged.
+    effective_limit = settings.SEARCH_DEFAULT_LIMIT if limit is None else int(limit)
+    if normalized_mode in LEGACY_SEARCH_MODES:
+        if normalized_mode == "hybrid":
+            return _hybrid_search(q, effective_limit, bm25_weight, semantic_weight)
+        if normalized_mode == "semantic":
+            return _semantic_search(q, effective_limit)
+        return _lexical_search(q, effective_limit)
+    return _lexical_search(q, effective_limit)
+
+
+@router.get(
+    "/modes",
+    name="search_modes",
+    summary="List the available search modes (Phase 9)",
+    description=(
+        "Machine-readable catalog of the specialized SEEK search modes "
+        "(web, ai, research, code) plus the legacy retrieval modes."
+    ),
+)
+def list_search_modes() -> dict[str, object]:
+    """Catalog describing every mode: strategy, limits, weights, capabilities."""
+    return mode_catalog()
 
 
 __all__ = [
     "router",
     "search_documents",
+    "list_search_modes",
     "_get_engine",
     "set_engine",
     "_lexical_search",
     "_semantic_search",
+    "_hybrid_search",
 ]
