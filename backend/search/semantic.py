@@ -164,6 +164,21 @@ class SemanticIndexManager:
         with self._lock:
             return len(self._documents)
 
+    def get_document(self, document_id: str) -> ProcessedDocument | None:
+        """Return the indexed document backing *document_id*, or ``None``.
+
+        Read-only counterpart of :meth:`SearchEngine.get_document` used by the
+        Phase 9 mode layer for snippet / code-snippet enrichment of hits that
+        only the semantic index surfaced.
+        """
+        target = str(document_id)
+        with self._lock:
+            documents = self._documents
+        for doc in documents:
+            if str(doc.document_id) == target:
+                return doc
+        return None
+
     def _repo(self) -> Optional[DocumentRepository]:
         if self._repository is not None:
             return self._repository

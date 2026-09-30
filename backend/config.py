@@ -55,6 +55,37 @@ class Settings(BaseSettings):
     RAG_LLM_TIMEOUT_SECONDS: float = 10.0
     RAG_TEMPERATURE: float = 0.2
 
+    # --- Phase 9 Specialized Search Modes (web | ai | research | code) ---
+    # Every knob below is read by ``backend.search.modes`` so mode behaviour is
+    # centralised instead of hard-coded magic numbers across the API layer.
+    MODE_DEFAULT: str = "web"
+    MODE_MAX_LIMIT: int = 50  # hard per-request cap shared with SEARCH_MAX_LIMIT
+    MODE_MAX_CANDIDATES: int = 100  # upper bound for widened candidate retrieval
+    MODE_WEB_LIMIT: int = 10
+    MODE_AI_LIMIT: int = 5
+    MODE_RESEARCH_LIMIT: int = 15
+    MODE_CODE_LIMIT: int = 10
+    # AI answer generation is optional per mode (research may synthesise too).
+    MODE_AI_ENABLED: bool = True
+    MODE_RESEARCH_RAG_ENABLED: bool = True
+    # Research mode: wider retrieval + source/document diversification.
+    RESEARCH_CANDIDATE_MULTIPLIER: int = 4
+    RESEARCH_SOURCE_DIVERSITY_CAP: int = 3
+    RESEARCH_SNIPPET_WORDS: int = 56
+    # Code Docs mode: lexical-leaning ranking over the indexed corpus, with
+    # documentation-source prioritisation and code-snippet extraction.
+    CODE_CANDIDATE_MULTIPLIER: int = 3
+    CODE_BM25_WEIGHT: float = 0.7
+    CODE_SEMANTIC_WEIGHT: float = 0.3
+    CODE_DOC_SOURCE_PRIORITY: bool = True
+    CODE_TECHNICAL_TERM_EXPANSION: bool = True
+    CODE_SNIPPET_WORDS: int = 34
+    CODE_SNIPPET_MAX_CHARS: int = 600
+    # A hit is only a "match" when its score exceeds this floor. The BM25 engine
+    # always returns up to ``limit`` documents (unmatched ones score 0.0), so the
+    # specialized modes drop those instead of reporting them as results.
+    MODE_MATCH_SCORE_FLOOR: float = 0.0
+
     # --- Phase 4 Controlled Web Crawler ---
     CRAWLER_ALLOWED_DOMAINS: str = ""
     CRAWLER_MAX_DEPTH: int = 2

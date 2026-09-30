@@ -74,6 +74,19 @@ class SearchEngine:
     def corpus_stats(self) -> dict[str, object]:
         return self._bm25.stats
 
+    def get_document(self, document_id: str) -> ProcessedDocument | None:
+        """Return the indexed document for *document_id*, or ``None``.
+
+        Read-only lookup used by the Phase 9 mode layer to re-render richer
+        snippets / code excerpts from content the index already holds. It never
+        mutates the index and returns ``None`` for unknown ids.
+        """
+        target = str(document_id)
+        for doc in self._bm25.documents:
+            if str(doc.document_id) == target:
+                return doc
+        return None
+
     def _rank_query(self, raw_query: str, limit: int) -> list[tuple[float, int]]:
         """Weighted tokens -> per-doc scores -> (score, doc-index) desc-sorted."""
         tokens = self._query.process(raw_query)

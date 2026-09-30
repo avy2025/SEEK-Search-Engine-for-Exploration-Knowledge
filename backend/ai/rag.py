@@ -35,11 +35,17 @@ logger = logging.getLogger("seek.ai.rag")
 def generate_rag_answer(
     request: AnswerRequest,
     provider: LLMProvider | None = None,
+    retrieval_payload: dict[str, object] | None = None,
 ) -> AnswerResponse:
     """Execute end-to-end RAG pipeline and return structured AnswerResponse.
 
     Gracefully handles RAG disabled state, insufficient context, LLM failures,
     and timeouts by falling back to search hits with explicit status reporting.
+
+    ``retrieval_payload`` lets an orchestration layer (e.g. the Phase 9 search
+    modes) hand over the hits it already retrieved so retrieval is not executed
+    twice; when omitted the pipeline performs its own retrieval exactly as
+    before.
     """
     start_time = time.perf_counter()
     query = request.query.strip()
@@ -48,7 +54,7 @@ def generate_rag_answer(
 
     # 1. Check if RAG is globally enabled
     if not settings.RAG_ENABLED:
-        ret_payload = _execute_retrieval(query, mode, limit)
+        ret_payload = retrieval_payload or _execute_retrieval(query, mode, limit)
         return _build_fallback_response(
             query=query,
             mode=mode,
@@ -58,9 +64,9 @@ def generate_rag_answer(
             start_time=start_time,
         )
 
-    # 2. Execute candidate search retrieval
+    # 2. Execute candidate search retrieval (or reuse supplied candidates)
     ret_start = time.perf_counter()
-    ret_payload = _execute_retrieval(query, mode, limit)
+    ret_payload = retrieval_payload or _execute_retrieval(query, mode, limit)
     ret_took_ms = (time.perf_counter() - ret_start) * 1000.0
 
     raw_hits = ret_payload.get("hits", [])
