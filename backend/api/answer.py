@@ -10,7 +10,7 @@ from backend.ai.rag import generate_rag_answer
 
 logger = logging.getLogger("seek.api.answer")
 
-router = APIRouter(prefix="/answer", tags=["answer"])
+router = APIRouter(prefix="/api/answer", tags=["answer"])
 
 
 @router.post(
