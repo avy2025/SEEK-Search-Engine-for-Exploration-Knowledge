@@ -1,11 +1,14 @@
-/* Single API client for the SEEK frontend (Phase 3).
+/* Single API client for the SEEK frontend (Phases 3 & 9).
  *
- * The backend stays the single source of truth for query processing, BM25
- * ranking and retrieval; this module only performs requests and shapes the
- * responses. The base URL is configurable through VITE_API_BASE_URL and falls
- * back to a same-origin proxy so the same bundle works with CORS (local dev)
- * and the Nginx reverse proxy (Docker).
+ * The backend stays the single source of truth for query processing, BM25 /
+ * semantic / hybrid ranking, mode orchestration and RAG answer generation; this
+ * module only performs requests and shapes the responses. The base URL is
+ * configurable through VITE_API_BASE_URL and falls back to a same-origin proxy
+ * so the same bundle works with CORS (local dev) and the Nginx reverse proxy
+ * (Docker).
  */
+
+import { DEFAULT_SEARCH_MODE, type SearchMode } from './modes';
 
 export interface HealthStatus {
   status: string;
@@ -20,6 +23,8 @@ export interface SearchHit {
   snippet: string;
   score: number;
   matched_terms: string[];
+  /** Phase 9 `code` mode only: excerpt extracted from the indexed document. */
+  code_snippet?: string | null;
 }
 
 export interface SearchResponse {
@@ -29,6 +34,43 @@ export interface SearchResponse {
   hits: SearchHit[];
   took_ms: number;
   message: string;
+  /** Legacy retrieval modes echo their retrieval mode. */
+  mode?: string;
+  /** Phase 9 specialized modes report an explicit health status. */
+  status?: string;
+  /** Phase 9 specialized modes: grounded answer, `null` when none was produced. */
+  answer?: string | null;
+  sources?: ModeSource[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ModeSource {
+  document_id: string;
+  title: string;
+  source: string;
+  domain: string;
+  rank: number;
+  score: number;
+  citation_id?: number | null;
+}
+
+/** Envelope returned for `web | ai | research | code` search modes. */
+export interface ModeSearchResponse extends SearchResponse {
+  mode: SearchMode;
+  status: string;
+  answer: string | null;
+  sources: ModeSource[];
+  metadata: Record<string, unknown>;
+}
+
+export type LegacySearchMode = 'lexical' | 'bm25' | 'semantic' | 'hybrid';
+
+export interface SearchOptions {
+  limit?: number;
+  /** Phase 9 specialized mode (`web | ai | research | code`). */
+  mode?: SearchMode;
+  /** Pre-Phase-9 retrieval mode; kept for advanced/debug use. */
+  legacyMode?: LegacySearchMode;
 }
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8000';
@@ -62,8 +104,14 @@ export async function fetchHealth(): Promise<HealthStatus> {
   }
 }
 
-export async function search(query: string, limit = 10): Promise<SearchResponse> {
-  const params = new URLSearchParams({ q: query, limit: String(limit) });
+export async function search(
+  query: string,
+  options: SearchOptions = {},
+): Promise<SearchResponse> {
+  const mode = options.mode ?? DEFAULT_SEARCH_MODE;
+  const params = new URLSearchParams({ q: query, mode });
+  if (options.limit !== undefined) params.set('limit', String(options.limit));
+  else if (options.legacyMode) params.set('mode', options.legacyMode);
   const path = `/api/search?${params.toString()}`;
   try {
     const res = await probe(apiBaseUrl, path, { method: 'GET' });
@@ -96,4 +144,32 @@ export function splitSource(source: string): SourceParts {
   } catch {
     return { domain: '', rest: source, pathOnly: true };
   }
+}
+
+/** Narrow a search response to the Phase 9 specialized-mode envelope. */
+export function asModeResponse(response: SearchResponse): ModeSearchResponse | null {
+  const mode = response.mode;
+  if (!mode || !['web', 'ai', 'research', 'code'].includes(mode)) return null;
+  return {
+    ...response,
+    mode: mode as SearchMode,
+    status: response.status ?? 'ok',
+    answer: response.answer ?? null,
+    sources: response.sources ?? [],
+    metadata: response.metadata ?? {},
+  };
+}
+
+/** Read a nested metadata value without pretending it always exists. */
+export function metaValue(
+  metadata: Record<string, unknown> | undefined,
+  path: string,
+): unknown {
+  if (!metadata) return undefined;
+  return path.split('.').reduce<unknown>((acc, key) => {
+    if (acc && typeof acc === 'object') {
+      return (acc as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, metadata);
 }

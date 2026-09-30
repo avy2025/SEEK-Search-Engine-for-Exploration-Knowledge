@@ -1,16 +1,26 @@
 import React from 'react';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, FileCode2 } from 'lucide-react';
 import type { SearchHit } from '../lib/api';
 import { splitSource } from '../lib/api';
+import type { SearchMode } from '../lib/modes';
 
 interface ResultCardProps {
   hit: SearchHit;
+  /** Active specialized mode; `code` renders the extracted code excerpt. */
+  mode?: SearchMode;
 }
 
-/** Single ranked result: title, source/domain, snippet, score, matched terms. */
-export const ResultCard: React.FC<ResultCardProps> = ({ hit }) => {
+/**
+ * Single ranked result: title, source/domain, snippet, score, matched terms.
+ *
+ * The code excerpt is only rendered when the backend supplied one
+ * (`hit.code_snippet`, produced by the Code Docs mode from indexed content) -
+ * nothing is ever synthesised client-side.
+ */
+export const ResultCard: React.FC<ResultCardProps> = ({ hit, mode }) => {
   const { domain, rest, pathOnly } = splitSource(hit.source);
   const isLink = !pathOnly && Boolean(hit.source);
+  const codeSnippet = hit.code_snippet?.trim() ?? '';
 
   const title = isLink ? (
     <a
@@ -57,6 +67,24 @@ export const ResultCard: React.FC<ResultCardProps> = ({ hit }) => {
       <p className="mt-3 text-sm leading-relaxed text-gray-300">
         {hit.snippet || '(no excerpt available)'}
       </p>
+
+      {codeSnippet && (
+        <div className="mt-3 overflow-hidden rounded-lg border border-seek-border bg-[#080c15]">
+          <p className="flex items-center gap-1.5 border-b border-seek-border px-3 py-1.5 text-[11px] font-medium text-gray-500">
+            <FileCode2 className="h-3 w-3" aria-hidden="true" />
+            Code excerpt from this document
+          </p>
+          <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-emerald-200/90">
+            <code>{codeSnippet}</code>
+          </pre>
+        </div>
+      )}
+
+      {mode === 'research' && (
+        <p className="mt-3 text-[11px] text-gray-600">
+          Retrieved evidence &mdash; any synthesis above is generated from this material.
+        </p>
+      )}
 
       {hit.matched_terms.length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Matched terms">
