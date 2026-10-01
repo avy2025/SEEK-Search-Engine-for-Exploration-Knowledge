@@ -9,7 +9,7 @@ Scoring notes
   1.5 / 0.75, the classic Okapi tuning).
 * Documents with zero content tokens never enter the index; terms absent from
   the corpus get score 0.0.
-* ``get_scores`` returns a flat ``list[float]`` aligned to ``self.documents``,
+* ``score`` returns a flat ``list[float]`` aligned to ``self.documents``,
   which lets upper layers rank and then slice by ``limit`` without ever touching
   the DB per request.
 """
@@ -45,9 +45,16 @@ class Bm25Index:
     ) -> None:
         self._documents: list[ProcessedDocument] = list(documents)
         self._titles: list[str] = [d.title for d in self._documents]
-        self._token_lists: list[list[str]] = [
-            list(d.tokens) for d in self._documents if d.tokens
-        ]
+        # Documents with zero content tokens never enter the BM25 corpus, so the
+        # corpus slots are recorded explicitly: score[i] must line up with
+        # documents[i], not with "the i-th document that happened to have
+        # tokens", otherwise every result after a token-less document is wrong.
+        self._token_lists: list[list[str]] = []
+        self._corpus_slots: list[int] = []
+        for position, doc in enumerate(self._documents):
+            if doc.tokens:
+                self._token_lists.append(list(doc.tokens))
+                self._corpus_slots.append(position)
         # The BM25Okapi reference implementation needs the raw token lists.
         self._corpus_tokens: list[list[str]] = self._token_lists
         self._bm25 = (
@@ -72,10 +79,15 @@ class Bm25Index:
 
     @property
     def vocabulary_size(self) -> int:
-        """Number of distinct terms known to the index (stop-word-stripped)."""
+        """Number of distinct terms known to the index (stop-word-stripped).
+
+        ``rank_bm25`` keeps ``idf`` as ``term -> document frequency``; its
+        ``doc_freqs`` is a *per-document* list, so it counts documents rather than
+        terms and must not be used here.
+        """
         if self._bm25 is None:
             return 0
-        return len(self._bm25.doc_freqs)
+        return len(self._bm25.idf)
 
     @property
     def stats(self) -> dict[str, object]:
@@ -100,15 +112,15 @@ class Bm25Index:
         if not qt or not self._corpus_tokens or self._bm25 is None:
             return [0.0 for _ in self._documents]
         try:
-            scores = self._bm25.get_scores(qt)
+            raw = self._bm25.get_scores(qt)
         except ValueError as exc:  # pragma: no cover - defensive
             logger.warning("BM25 scoring problem: %s", exc)
-            scores = [0.0] * len(self._documents)
-        # Guard against length mismatch (should never happen, kept cheap).
-        if len(scores) != len(self._documents):
-            scores = scores[: len(self._documents)] + [0.0] * max(
-                0, len(self._documents) - len(scores)
-            )
+            return [0.0 for _ in self._documents]
+        scores = [0.0 for _ in self._documents]
+        for slot, value in enumerate(raw):
+            if slot >= len(self._corpus_slots):  # pragma: no cover - defensive
+                break
+            scores[self._corpus_slots[slot]] = float(value)
         return scores
 
     # -- documents ------------------------------------------------------------

@@ -113,7 +113,7 @@ def load_corpus(
     # Deterministic: *all* .md files sorted by relative path.
     files = sorted(root.rglob("*.md"), key=lambda p: p.relative_to(root).as_posix())
     for path in files:
-        if path.stem.lower() in SKIP_FILENAMES:
+        if path.name.lower() in SKIP_FILENAMES:
             continue
         try:
             raw = path.read_text(encoding="utf-8")

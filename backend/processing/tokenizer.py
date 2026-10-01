@@ -79,7 +79,9 @@ def snippet_tokens(text: str, *, words: int = _WINDOW) -> Iterator[str]:
     at most *words* tokens. Because snippets are built after scoring, the window
     is deliberately stop-word-inclusive so the excerpt reads naturally.
     """
-    return iter_tokens(text, keep_stopwords=keep_stopwords)
+    from itertools import islice
+
+    return islice(iter_tokens(text, keep_stopwords=True), max(0, int(words)))
 
 
 __all__ = ["STOPWORDS", "TOKEN_RE", "normalize", "tokenize", "snippet_tokens"]
