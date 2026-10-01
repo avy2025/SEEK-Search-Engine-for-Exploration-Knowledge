@@ -61,7 +61,14 @@ def start_crawl(request: CrawlRequest) -> dict[str, object]:
         user_agent=settings.CRAWLER_USER_AGENT,
         respect_robots=request.respect_robots,
         allow_private_hosts=request.allow_private_hosts,
-    )
+    ).sanitized()
+    if not config.seed_urls:
+        # Pydantic only enforces a non-empty *list*; a list of blanks survives
+        # it, and starting a job without a seed would raise from the manager.
+        raise HTTPException(
+            status_code=422,
+            detail="crawl job requires at least one non-blank seed URL",
+        )
     job = get_crawl_manager().start_job(config)
     snapshot = job.to_dict()
     return {

@@ -35,7 +35,6 @@ from backend.crawler.url import (
     domain_matches,
     hostname_of,
     is_crawlable_url,
-    is_dangerous_url,
     normalize_url,
     resolve_url,
     scope_hosts,
@@ -84,7 +83,13 @@ async def a_crawl(
     def _seed(url: str, depth: int = 0) -> None:
         nonlocal out_of_scope
         canonical = normalize_url(url)
-        if is_dangerous_url(canonical):
+        # Seeds go through the *same* gate as discovered links. Checking only
+        # `is_dangerous_url` here would let a loopback/private host or a binary
+        # URL supplied as a seed reach the HTTP client, which is exactly the
+        # request the crawl is supposed to be forbidden from making.
+        if not is_crawlable_url(
+            canonical, allow_private_hosts=config.allow_private_hosts
+        ):
             failures.append(
                 FailedFetch(url=url, error_code="unparsable_seed", error="unsafe or unparsable seed URL")
             )
