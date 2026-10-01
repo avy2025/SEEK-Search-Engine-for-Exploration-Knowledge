@@ -81,6 +81,25 @@ def _hits_payload(response: SearchResponse) -> list[dict[str, object]]:
     ]
 
 
+def _semantic_status() -> tuple[object | None, dict[str, object]]:
+    """Resolve the semantic manager defensively.
+
+    Returns ``(manager, status)``. A manager that cannot even be constructed is
+    reported as an *unavailable* semantic layer — the same contract the BM25 path
+    already uses for ``semantic.status`` — instead of propagating a 500. Callers
+    that need the manager itself get ``None`` and must degrade.
+    """
+    try:
+        manager = get_semantic_index_manager()
+        return manager, dict(manager.status())
+    except Exception as exc:  # noqa: BLE001 - semantic layer is best-effort
+        return None, {
+            "available": False,
+            "loaded": False,
+            "message": f"semantic index manager unavailable: {exc}",
+        }
+
+
 def _hybrid_search(
     q: str,
     limit: int,
@@ -90,13 +109,12 @@ def _hybrid_search(
     """Hybrid mode: merge BM25 and Semantic candidates with score normalization."""
     started = time.perf_counter()
     bm25_manager = get_index_manager()
-    sem_manager = get_semantic_index_manager()
+    sem_manager, sem_status = _semantic_status()
 
     bm25_status = bm25_manager.status()
-    sem_status = dict(sem_manager.status())
 
     bm25_avail = bool(bm25_manager.engine.document_count > 0 or bm25_status.get("loaded"))
-    sem_avail = bool(sem_status.get("available") and sem_status.get("loaded"))
+    sem_avail = bool(sem_manager is not None and sem_status.get("available") and sem_status.get("loaded"))
 
     try:
         norm_w = validate_and_normalize_weights(bm25_weight, semantic_weight)
@@ -191,8 +209,7 @@ def _hybrid_search(
 def _semantic_search(q: str, limit: int) -> dict[str, object]:
     """Semantic mode: cosine-similarity FAISS search over local embeddings."""
     started = time.perf_counter()
-    manager = get_semantic_index_manager()
-    info = dict(manager.status())
+    manager, info = _semantic_status()
     payload: dict[str, object] = {
         "query": q.strip(),
         "total": 0,
@@ -207,7 +224,7 @@ def _semantic_search(q: str, limit: int) -> dict[str, object]:
         "semantic": info,
     }
 
-    if not info.get("available"):
+    if manager is None or not info.get("available"):
         payload["message"] = (
             "semantic search unavailable: " + str(info.get("message") or "")
         )
@@ -229,9 +246,7 @@ def _semantic_search(q: str, limit: int) -> dict[str, object]:
     payload["hits"] = _hits_payload(response)
     payload["took_ms"] = round((time.perf_counter() - started) * 1000.0, 3)
     payload["message"] = response.message
-    payload["semantic"]["status"] = (
-        "not_built" if not info.get("loaded") else "ok"
-    )
+    payload["semantic"]["status"] = "not_built" if not info.get("loaded") else "ok"
     return payload
 
 
@@ -252,10 +267,8 @@ def _lexical_search(q: str, limit: int) -> dict[str, object]:
     }
     if engine.document_count == 0:
         payload["message"] = "index not built; run /api/index/rebuild"
-    try:
-        payload["semantic"] = get_semantic_index_manager().status()
-    except Exception:  # noqa: BLE001 - status is best-effort on the BM25 path
-        payload["semantic"] = {"available": False, "message": "semantic status unavailable"}
+    _, semantic_status = _semantic_status()
+    payload["semantic"] = semantic_status
     return payload
 
 

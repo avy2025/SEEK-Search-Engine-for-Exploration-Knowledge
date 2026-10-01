@@ -203,7 +203,9 @@ def read_faiss_metadata(index_dir: str | Path) -> Optional[FaissIndexMetadata]:
         return None
     try:
         return FaissIndexMetadata.from_dict(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, json.JSONDecodeError, ValueError) as exc:
+    except (OSError, json.JSONDecodeError, ValueError, TypeError, AttributeError) as exc:
+        # ``AttributeError``/``TypeError`` cover a ``documents`` list whose
+        # entries are not JSON objects: unusable metadata, not a crash.
         logger.warning("faiss metadata unreadable: %s", exc)
         return None
 
@@ -277,7 +279,7 @@ def load_faiss_index(index_dir: str | Path) -> FaissLoadResult:
             )
             for d in metadata.documents
         )
-    except (TypeError, ValueError, KeyError) as exc:
+    except (TypeError, ValueError, KeyError, AttributeError) as exc:
         return FaissLoadResult(None, None, False, f"invalid faiss document data: {exc}")
 
     if len(documents) != metadata.document_count:

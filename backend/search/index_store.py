@@ -234,7 +234,10 @@ def read_metadata(index_dir: str | Path) -> Optional[IndexMetadata]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         return IndexMetadata.from_dict(data)
-    except (OSError, json.JSONDecodeError, ValueError) as exc:
+    except (OSError, json.JSONDecodeError, ValueError, TypeError, AttributeError) as exc:
+        # A ``documents`` list holding non-objects raises TypeError/ValueError
+        # (or AttributeError in the FAISS mirror); all of them mean the same
+        # thing to a caller: this metadata cannot be trusted.
         logger.warning("index metadata unreadable: %s", exc)
         return None
 
@@ -276,13 +279,21 @@ def load_index(index_dir: str | Path) -> IndexLoadResult:
         )
     if metadata is None:
         return IndexLoadResult(None, None, False, "index metadata missing")
+    # The metadata is written by the same commit as the artifact, so both must
+    # agree on the format; a metadata file from another format cannot be
+    # validated against this artifact (and vice versa).
+    if int(metadata.format_version) != INDEX_FORMAT_VERSION:
+        return IndexLoadResult(
+            None, None, False,
+            f"unsupported index metadata format version {metadata.format_version}",
+        )
 
     try:
         documents = tuple(
             document_from_dict(d)
             for d in payload.get("documents") or ()
         )
-    except (TypeError, ValueError, KeyError) as exc:
+    except (TypeError, ValueError, KeyError, AttributeError) as exc:
         return IndexLoadResult(None, None, False, f"invalid document data: {exc}")
 
     if len(documents) != metadata.document_count:
