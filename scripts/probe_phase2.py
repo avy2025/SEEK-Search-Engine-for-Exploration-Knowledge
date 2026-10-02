@@ -44,3 +44,20 @@ try:
     print("app_build=OK title=" + str(app.title))
 except Exception as exc:  # noqa: BLE001
     print("app_build=FAIL " + type(exc).__name__ + " " + str(exc))
+
+# Phase 2's deliverable is a *searchable* index, not a set of importable modules:
+# load the committed corpus, index it and run one query end to end. This stays
+# offline (in-memory BM25 only) and never touches PostgreSQL or the network.
+try:
+    from backend.pipeline import build_pipeline
+
+    engine = build_pipeline()
+    documents = engine.document_count
+    hits = engine.search("search engine", limit=3).hits
+    search_ok = documents > 0 and bool(hits)
+    print(
+        f"search_ok={'true' if search_ok else 'false'} "
+        f"documents={documents} hits={len(hits)}"
+    )
+except Exception as exc:  # noqa: BLE001
+    print("search_ok=false " + type(exc).__name__ + " " + str(exc))
