@@ -242,7 +242,9 @@ The complete product is intentionally divided into stages so each stage can be d
 - **NFR-12 (Reproducibility)**: Dependencies and container configuration shall be documented.
 - **NFR-13 (Configuration)**: Mode behaviour (limits, weights, diversification, snippet sizes) shall be driven by centralized configuration rather than hard-coded values.
 - **NFR-14 (No Duplication)**: Specialized modes shall reuse the existing retrieval, ranking and RAG services rather than reimplementing them.
-- **NFR-15 (Offline Testability)**: The Phase 9 test suite shall run without paid APIs, external model downloads or a live database.
+- **NFR-15 (Offline Testability)**: The Phase 10 test suite shall run without paid APIs, external model downloads or a live database. Tests requiring real infrastructure shall skip cleanly rather than fail.
+- **NFR-16 (Documented Coverage)**: The automated test suite shall be accompanied by a coverage matrix naming, per feature, the tests that protect it and the gaps that are deliberate. No coverage percentage shall be published without an actual measurement run.
+- **NFR-17 (Structured Degradation)**: No user-facing failure path shall return an unhandled 5xx; unavailable or degraded capability shall be reported through the documented structured status (`ok` / `degraded` / `unavailable` / `error`).
 
 ---
 
@@ -330,3 +332,22 @@ The weights are configurable and will be tuned experimentally using a small rele
 > `semantic` status reporting and graceful degradation (no silent BM25
 > fallback). **97 backend tests total** pass. Phases 7+ (hybrid ranking, RAG)
 > remain roadmap backlog.
+
+> **Implementation Status (Phases 7–10 complete)**: Phase 7 delivered hybrid
+> ranking (deterministic min-max normalisation, weighted merge, `document_id`
+> dedup, weight validation and explicit degraded/unavailable reporting on
+> `mode=hybrid`). Phase 8 delivered source-grounded RAG (`POST /api/answer`,
+> passage selection, grounded prompt builder, swappable `LLMProvider`s, and an
+> explicit structured fallback). Phase 9 delivered the four specialized search
+> modes (`web`, `ai`, `research`, `code`) as a thin orchestration layer over the
+> existing retrieval services, with a validated `mode` parameter, one response
+> envelope and the machine-readable catalog at `GET /api/search/modes`.
+> Phase 10 delivered the cross-phase automated testing suite: layered unit,
+> API, integration, security and regression modules behind one pytest entry
+> point, shared offline fixtures, a persistence matrix (valid, missing, corrupt,
+> stale, metadata-mismatch, atomic-write failure, interrupted write), the full
+> search mode × index-state × query matrix, frontend suites driven from pytest,
+> and a documented coverage matrix in `docs/TESTING_PHASE10.md`. The suite runs
+> with no PostgreSQL, no embedding-model download and no outbound HTTP, and
+> satisfies NFR-15, NFR-16 and NFR-17. Phases 11+ (Docker hardening, cloud
+> deployment, evaluation, final documentation) remain roadmap backlog.

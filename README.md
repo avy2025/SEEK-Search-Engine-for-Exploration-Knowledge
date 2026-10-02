@@ -11,6 +11,7 @@
 [![Phase 7: Hybrid Ranking](https://img.shields.io/badge/Phase%207-Hybrid%20Ranking-Completed-brightgreen.svg)]()
 [![Phase 8: RAG Answers](https://img.shields.io/badge/Phase%208-AI%20Answers-Completed-brightgreen.svg)]()
 [![Phase 9: Search Modes](https://img.shields.io/badge/Phase%209-Specialized%20Modes-Completed-brightgreen.svg)]()
+[![Phase 10: Test Suite](https://img.shields.io/badge/Phase%2010-Automated%20Testing%20Suite-Completed-brightgreen.svg)]()
 [![Stack: FastAPI + React + Docker](https://img.shields.io/badge/Stack-FastAPI%20%7C%20React%20%7C%20Docker-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
@@ -26,8 +27,8 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## 🚦 Current Project Status
 
-- **Phases 1–9**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler · Persistent Indexing Pipeline · Semantic Search (Local ML Embeddings) · Hybrid Ranking · AI/RAG Answers · Specialized Search Modes
-- **Next Phase**: **Phase 10 — Automated Testing Suite** `[UPCOMING]`
+- **Phases 1–10**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler · Persistent Indexing Pipeline · Semantic Search (Local ML Embeddings) · Hybrid Ranking · AI/RAG Answers · Specialized Search Modes · Automated Testing Suite
+- **Next Phase**: **Phase 11 — Docker Hardening & Optimization** `[UPCOMING]`
 
 ---
 
@@ -408,11 +409,89 @@ curl -s -i "http://localhost:8000/api/search?q=python&mode=bogus"   # 422 invali
 
 ---
 
+## ✅ PHASE 10 COMPLETE FEATURES (Automated Testing Suite)
+
+Phase 10 turns "the tests we happened to write" into a **documented, cross-phase
+automated testing suite** with one entry point and no required infrastructure.
+Full coverage matrix: [`docs/TESTING_PHASE10.md`](docs/TESTING_PHASE10.md).
+
+1. **One offline gate** — `python -m pytest -q` runs the whole suite with **no
+   PostgreSQL, no embedding-model download and no outbound HTTP**. Repository,
+   embedding and semantic-index dependencies are replaced by in-memory doubles
+   and deterministic stubs; tests that need real infrastructure read
+   `SEEK_TEST_DATABASE_URL` and skip cleanly when it is absent.
+
+2. **Shared fixtures** (`tests/conftest.py`) — sample corpus documents, an
+   in-memory `DocumentRepository` with `available` / `fail_with` switches, the
+   canonical degraded ("PostgreSQL unreachable") repository, isolated
+   `IndexManager` / semantic managers pointed at `tmp_path`, present/unavailable
+   semantic doubles, a hermetic `TestClient`, and autouse process-singleton
+   isolation so tests never leak state into each other.
+
+3. **Five new suites across 714 tests**:
+   - `tests/test_unit_phase10.py` (334) — tokenization, snippets, corpus loading,
+     pipeline, query processing, BM25 scoring and vocabulary size, normalisation,
+     hybrid weight validation and merge, RAG models/prompt/passage selection/
+     providers/orchestrator, crawler URL & robots safety, HTML extraction, fetch,
+     crawl store/manager, index and FAISS artifact metadata, settings.
+   - `tests/test_api_phase10.py` (138) — every published route, its validation
+     and response contract, the mode catalog endpoint, crawl and index endpoints,
+     the answer endpoint, and the full **search mode × index-state × query
+     matrix** (present / empty / absent index × each mode × matching, non-matching
+     and invalid queries).
+   - `tests/test_integration_phase10.py` (53) — corpus → index end to end,
+     persistence through the repository, the BM25 and FAISS persistence matrices
+     (valid, missing, corrupt, stale, metadata-version mismatch, atomic-write
+     failure, interrupted write) and failure/resilience combinations.
+   - `tests/test_security_phase10.py` (136) — query input is never interpreted as
+     code, highlight escaping happens before `<mark>` wrapping, crawl URL/SSRF
+     safety including seed validation, no-fabricated-answers guarantees, and
+     repository hygiene (no credentials in errors).
+   - `tests/test_regression_phase10.py` (53) — the **seams between phases**:
+     route inventory stability, the Phase 2 corpus and acceptance probe, the
+     crawler → index hop, shared persistence constants, the hybrid weight
+     contract through the API, RAG composition, mode catalog parity between
+     backend, API and frontend, frontend suites + typecheck + build, documentation
+     wiring, and a deliberately non-fragile performance smoke tier.
+
+4. **Frontend coverage through pytest** — reusing the existing `node:test`
+   pattern: `frontend/tests/modes.test.mjs` verifies the UI mode catalog against
+   the backend contract, and `npm run test:frontend` runs both frontend suites.
+   `TestFrontendSuites` drives `npm run test:frontend`, `typecheck` and `build`
+   from pytest, skipping cleanly when Node is unavailable.
+
+5. **Defects the suite found and fixed** — no product features were added, but
+   writing the tests surfaced eleven real bugs, including a BM25 score/document
+   misalignment that returned the **wrong document** whenever a corpus document
+   produced no tokens, an inflated vocabulary size, a `NameError` in
+   `snippet_tokens()`, a skip-list that indexed `index.md`, undetected metadata
+   version mismatches, and two HTTP 500s where structured degradation was
+   documented (`mode=semantic` with a failing semantic manager, and a
+   blank-seed crawl request).
+
+6. **Honest documentation** — the matrix reports *which behaviour is covered by
+   which test* and what is deliberately **not** covered (live PostgreSQL, live
+   embedding model, load testing, browser E2E, coverage measurement). It claims
+   **no coverage percentage**, and a test enforces that no such number is
+   published without an actual measurement run.
+
+Run it:
+
+```bash
+python -m pytest -q                  # everything
+python scripts/probe_phase2.py       # phase acceptance gate: 18/18 imports + a real query
+cd frontend && npm run test:frontend && npm run typecheck && npm run build
+```
+
+---
+
 ## ❌ NOT YET IMPLEMENTED
 
 To keep the development scope clean and strictly phase-aligned, the following components are **NOT** yet implemented:
 
-- ❌ Consolidated Automated Testing Suite & CI hardening (Phase 10)
+- ❌ Multi-stage Docker build optimisation, volume persistence, container health checks and restart policies (Phase 11)
+- ❌ Cloud deployment preparation and production CORS configuration (Phase 12)
+- ❌ Latency/relevance benchmarking and evaluation sets (Phase 13)
 - ❌ Advanced ranking signals / learning-to-rank (Phase 11+)
 - ❌ User accounts, saved searches and personalization (Phase 12+)
 - ❌ Horizontal scaling / multi-node index sharding (Phase 13+)
@@ -509,7 +588,7 @@ To keep the development scope clean and strictly phase-aligned, the following co
 | **Vector Search** | faiss-cpu | Persistent FAISS semantic index (`IndexFlatIP`) |
 | **Database** | PostgreSQL 16 Alpine | Persistent metadata and crawl queue storage |
 | **Containerization** | Docker, Docker Compose, Nginx | Reproducible containerized stack |
-| **Testing** | Pytest, TestClient, Httpx | Automated integration and unit testing |
+| **Testing** | Pytest, FastAPI TestClient, Httpx, `node:test` | Automated unit, API, integration, persistence, security and regression suites (Phase 10) |
 
 ---
 
@@ -559,8 +638,11 @@ To keep the development scope clean and strictly phase-aligned, the following co
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Run pytest test suite
+# Run the full automated testing suite (offline: no DB, no model download)
 python -m pytest -q
+
+# Run the Phase 2 acceptance probe (18/18 imports + a real query)
+python scripts/probe_phase2.py
 
 # Run FastAPI backend with Uvicorn
 python backend/main.py
@@ -576,7 +658,17 @@ npm install
 # Start Vite dev server
 npm run dev
 # App will be accessible at http://localhost:3000
+
+# Frontend test suites, typecheck and production build (Phase 10)
+npm run test:frontend
+npm run typecheck
+npm run build
 ```
+
+The frontend suites use Node's built-in `node:test` runner — no extra test
+framework is required. `npm run test:frontend` runs both `test:urlstate` and
+`test:modes`; the same scripts are invoked from `tests/test_regression_phase10.py`
+so `python -m pytest -q` covers the frontend too.
 
 ---
 
@@ -682,12 +774,28 @@ To verify that the Phase 1 backend service and health checks are functioning cor
    `?q=python&mode=research`, browser back/forward restores the previous mode, and
    the Research and Code modes render their source / snippet panels.
 
+10. **Phase 10 Test Suite Verification** (no database, model download or network
+    required):
+    ```bash
+    # Backend + API + integration + security + regression
+    python -m pytest -q
+    # Phase 2 acceptance probe (imports, app build, one real query)
+    python scripts/probe_phase2.py
+    # Frontend suites, typecheck and production build
+    cd frontend && npm run test:frontend && npm run typecheck && npm run build
+    ```
+    Expected: `pytest -q` reports every test passing with no failures; the probe
+    prints `import_ok=18/18`, `app_build=OK` and `search_ok=true`; all frontend
+    commands exit `0`. The coverage matrix and the list of deliberate gaps are in
+    [`docs/TESTING_PHASE10.md`](docs/TESTING_PHASE10.md).
+
 ---
 
 ## 🔮 Next Planned Phase
 
-**Phase 10: Consolidated Automated Testing Suite & CI hardening** (one entry
-point that runs backend, frontend and acceptance checks in CI on every push)
+**Phase 11: Docker Hardening & Optimization** — multi-stage build optimisation,
+named volumes for PostgreSQL data and the index directories, and container health
+checks with restart policies.
 
 ---
 

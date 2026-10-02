@@ -102,7 +102,8 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 > acceptance probe (`scripts/probe_phase2.py`) and the test suites
 > (`tests/test_search_phase2.py`, `tests/test_crawler_phase4.py`,
 > `tests/test_index_persistence_phase5b.py`,
-> `tests/test_semantic_search_phase6.py`).
+> `tests/test_semantic_search_phase6.py`, plus the cross-phase Phase 10 suite
+> described in §3.8).
 > `POST /api/answer` (RAG) remains roadmap backlog.
 
 > **Implemented (Phases 7–9)**: `GET /api/search` additionally accepts
@@ -224,6 +225,58 @@ arrange its output.
     already indexed. It adds no crawler and calls no external API.
 - **No fabrication**: `answer` is `null` whenever the RAG pipeline falls back,
   and snippets/code excerpts are re-rendered from indexed document content only.
+
+### 3.8 Test Architecture (`tests/`, `frontend/tests/`)
+
+Phase 10 turns testing into an architectural concern rather than a collection of
+per-phase scripts. The suite is organised by **what it protects** rather than by
+which phase wrote the code, because the contracts most likely to rot are the
+ones that span a phase boundary.
+
+- **Layered suites** (`tests/`):
+  | Layer | Module | Protects |
+  |---|---|---|
+  | Unit | `test_unit_phase10.py` | Processing, BM25, query, hybrid, RAG, crawler helpers, artifact metadata, settings |
+  | API | `test_api_phase10.py` | Every published route: routing, validation, contracts, mode × index-state × query matrix |
+  | Integration | `test_integration_phase10.py` | Corpus → index, persistence matrices (valid/missing/corrupt/stale/metadata-mismatch/atomic-write-failure/interrupted-write), failure combinations |
+  | Security | `test_security_phase10.py` | Input never interpreted, escaping order, URL/SSRF safety, no-fabricated-answers, repository hygiene |
+  | Regression | `test_regression_phase10.py` | Cross-phase seams, frontend wiring, documentation wiring, performance smoke |
+
+  The original per-phase modules (`test_search_phase2.py`,
+  `test_crawler_phase4.py`, `test_index_persistence_phase5b.py`,
+  `test_semantic_search_phase6.py`, `test_hybrid_phase7.py`,
+  `test_rag_phase8.py`, `test_search_modes_phase9.py`) are retained unchanged so
+  phase history stays auditable.
+
+- **Shared fixtures** (`tests/conftest.py`): in-memory document corpora, a
+  `FakeRepository` implementing the full `DocumentRepository` surface with
+  `available` / `fail_with` switches, the canonical degraded repository,
+  `IndexManager` / `SemanticIndexManager` instances redirected to `tmp_path`,
+  present/unavailable semantic doubles, and a hermetic `TestClient`. An autouse
+  fixture resets the index, semantic and crawl singletons between tests, so no
+  test can observe state left by another.
+
+- **Hermetic by construction**: the default gate needs no PostgreSQL, no
+  embedding-model download and no outbound HTTP. Tests requiring real
+  infrastructure read `SEEK_TEST_DATABASE_URL` and skip cleanly when it is
+  absent; `sentence_transformers` is never imported at module scope, so
+  `backend.main` stays importable without the ML stack.
+
+- **Frontend as a first-class test citizen**: frontend logic lives in pure
+  modules (`urlState.ts`, `modes.ts`) testable with Node's built-in `node:test`
+  runner — no test-framework dependency. `npm run test:frontend` runs both
+  suites, and `TestFrontendSuites` drives `test:frontend`, `typecheck` and
+  `build` from pytest so a single command verifies the whole stack.
+
+- **Contract documentation as a test**: `docs/TESTING_PHASE10.md` holds the
+  coverage matrix, and `TestDocumentationIsPresent` asserts that the README
+  documents every published route, that the roadmap marks Phase 10 complete, and
+  that the matrix publishes **no coverage percentage** without a real measurement
+  run.
+
+> **Implemented (Phase 10)**: `python -m pytest -q` is the single gate covering
+> Phases 0–9; `python scripts/probe_phase2.py` verifies the Phase 2 acceptance
+> criteria (18/18 imports, app build, and one real end-to-end query).
 
 ---
 

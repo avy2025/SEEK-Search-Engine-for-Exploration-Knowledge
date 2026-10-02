@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 9 (Specialized Search Modes) - **COMPLETED**  
-> **Next Recommended Phase**: Phase 10 (Automated Testing Suite)
+> **Current Phase**: Phase 10 (Automated Testing Suite) - **COMPLETED**  
+> **Next Recommended Phase**: Phase 11 (Docker Hardening & Optimization)
 
 ---
 
@@ -106,10 +106,18 @@
 
 ---
 
-### [ ] Phase 10: Automated Testing Suite
-- [ ] Write unit tests for query normalization, BM25 scoring, and chunking logic.
-- [ ] Write integration tests for API endpoints (`/health`, `/api/search`, `/api/crawl`).
-- [ ] Write crawler allowlist and robots parser test suite.
+### [x] Phase 10: Automated Testing Suite (COMPLETED)
+- [x] Documented cross-phase coverage matrix (`docs/TESTING_PHASE10.md`) mapping feature → existing tests → missing coverage → Phase 10 tests, with **no** fabricated coverage percentage.
+- [x] Shared offline fixtures in `tests/conftest.py` (corpus docs, `FakeRepository`, degraded repository, isolated `IndexManager`/semantic managers, semantic doubles, hermetic `TestClient`) plus process-singleton isolation.
+- [x] `tests/test_unit_phase10.py` — unit coverage for tokenization, snippets, corpus loading, pipeline, query processing, BM25 scoring/alignment, normalisation, weight validation, highlighting, hybrid merge, RAG models/prompt/passages/providers/orchestrator, crawler URL/robots/extract/fetch/store/manager, index+FAISS artifact metadata and settings.
+- [x] `tests/test_api_phase10.py` — every published route: routing, validation, response contracts, mode catalog endpoint, crawl endpoint, index status/lifecycle, answer endpoint, plus the full **mode × index-state × query matrix**.
+- [x] `tests/test_integration_phase10.py` — corpus → index end to end, persistence through the repository, the BM25 and FAISS persistence matrices (valid / missing / corrupt / stale / metadata mismatch / atomic-write failure / interrupted write) and failure combinations.
+- [x] `tests/test_security_phase10.py` — query input is never interpreted, highlight escaping order, crawl URL/SSRF safety and seed validation, no-fabricated-answers guarantees, repository hygiene.
+- [x] `tests/test_regression_phase10.py` — cross-phase seams (Phase 2 chain + `scripts/probe_phase2.py` gate, crawler → index hop, persistence constants, hybrid weight contract, RAG composition, mode catalog/frontend parity), frontend suites driven through pytest, documentation wiring and a non-fragile performance smoke tier.
+- [x] Frontend coverage reusing the existing `node:test` pattern — `frontend/tests/modes.test.mjs` (mode catalog parity) plus a combined `npm run test:frontend` script, both driven from pytest.
+- [x] Documented deliberate gaps (live PostgreSQL via `SEEK_TEST_DATABASE_URL`, live embedding model, load testing, browser E2E, coverage measurement) instead of hiding them.
+- [x] Fix the defects the new tests exposed (BM25 score/document misalignment and vocabulary count, tokenizer `snippet_tokens` `NameError`, loader skip-list matching, artifact metadata version validation, structured semantic/crawl degradation instead of HTTP 500, crawl seed URL validation) — no product features added.
+- [x] Verification gate: `python -m pytest -q`, `python scripts/probe_phase2.py`, `npm run test:frontend`, `npm run typecheck`, `npm run build` all pass.
 
 ---
 
