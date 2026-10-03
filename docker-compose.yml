@@ -40,10 +40,10 @@ services:
       # persisted here so container rebuilds do not re-download it.
       - HF_HOME=/app/.huggingface
     volumes:
-      - ./backend:/app/backend
-      - ./data:/app/data
-      - ./indexes:/app/indexes
-      - ./.huggingface:/app/.huggingface
+      - ./backend:/app/backend:ro
+      - seek_data:/app/data
+      - seek_indexes:/app/indexes
+      - seek_huggingface:/app/.huggingface
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,6 +52,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   # ----------------------------------------------------
   # Frontend UI Container (React + Vite + Nginx)
@@ -69,7 +70,19 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   postgres_data:
+    driver: local
+  seek_data:
+    driver: local
+  seek_indexes:
+    driver: local
+  seek_huggingface:
     driver: local
