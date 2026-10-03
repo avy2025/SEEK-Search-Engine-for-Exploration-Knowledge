@@ -28,7 +28,7 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 ## 🚦 Current Project Status
 
 - **Phases 1–10**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler · Persistent Indexing Pipeline · Semantic Search (Local ML Embeddings) · Hybrid Ranking · AI/RAG Answers · Specialized Search Modes · Automated Testing Suite
-- **Next Phase**: **Phase 11 — Docker Hardening & Optimization** `[UPCOMING]`
+- **Current Phase**: **Phase 11 — Docker Hardening & Optimization** `[IN PROGRESS]` — Hardened Dockerfiles with multi-stage builds, added persistent volumes (Postgres + data/indexes/HF cache), improved health checks and restart policies.
 
 ---
 
