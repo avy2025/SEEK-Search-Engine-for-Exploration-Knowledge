@@ -59,12 +59,12 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({ value, onChange, dis
   };
 
   return (
-    <div className="w-full max-w-2xl">
+    <div className="w-full max-w-3xl">
       <div
         role="radiogroup"
         aria-label="SEEK search mode"
         onKeyDown={handleKeyDown}
-        className="flex w-full gap-1.5 overflow-x-auto rounded-xl border border-seek-border bg-seek-card/70 p-1.5 sm:w-auto sm:overflow-visible"
+        className="flex w-full gap-1 overflow-x-auto border-b border-seek-border py-1 sm:w-auto sm:overflow-visible"
       >
         {MODE_OPTIONS.map((option) => {
           const Icon = MODE_ICON[option.id];
@@ -83,12 +83,12 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({ value, onChange, dis
               disabled={disabled}
               onClick={() => onChange(option.id)}
               className={[
-                'inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                'inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm transition-colors',
                 'focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent',
                 'disabled:cursor-not-allowed disabled:opacity-60',
                 selected
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm'
-                  : 'text-gray-300 hover:bg-seek-dark hover:text-gray-100',
+                  ? 'border-seek-accent font-medium text-seek-accent'
+                  : 'border-transparent text-gray-400 hover:text-seek-ink',
               ].join(' ')}
             >
               <Icon className="h-4 w-4" />

@@ -38,15 +38,15 @@ const StatusBanner: React.FC<{ modeResponse: ModeSearchResponse }> = ({ modeResp
   const config =
     status === 'unavailable'
       ? {
-          tone: 'border-rose-900/50 bg-rose-950/30 text-rose-200',
-          badge: 'border-rose-800/60 bg-rose-900/40 text-rose-300',
+          tone: 'border-seek-border bg-white text-gray-300',
+          badge: 'border-seek-border bg-gray-50 text-gray-400',
           icon: CircleSlash,
           title: `${modeLabel(modeResponse.mode)} is unavailable`,
         }
       : status === 'degraded'
         ? {
-            tone: 'border-amber-900/50 bg-amber-950/25 text-amber-200',
-            badge: 'border-amber-800/60 bg-amber-900/40 text-amber-300',
+            tone: 'border-seek-border bg-white text-gray-300',
+            badge: 'border-seek-border bg-gray-50 text-gray-400',
             icon: AlertTriangle,
             title: `${modeLabel(modeResponse.mode)} served in degraded mode`,
           }
@@ -59,12 +59,12 @@ const StatusBanner: React.FC<{ modeResponse: ModeSearchResponse }> = ({ modeResp
   );
 
   return (
-    <div className={`rounded-xl border p-4 ${config.tone}`} role="status" aria-live="polite">
+    <div className={`rounded-lg border p-4 ${config.tone}`} role="status" aria-live="polite">
       <div className="flex flex-wrap items-center gap-2">
         <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
         <p className="text-sm font-semibold">{config.title}</p>
         {typeof strategy === 'string' && (
-          <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] ${config.badge}`}>
+          <span className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${config.badge}`}>
             retrieval: {strategy}
           </span>
         )}
@@ -94,7 +94,7 @@ const EmptyState: React.FC<{ response: SearchResponse; specialized: boolean }> =
 
   return (
     <div
-      className="w-full rounded-xl border border-seek-border bg-seek-card p-8 text-center"
+      className="w-full rounded-lg border border-seek-border bg-white p-8 text-center"
       role="status"
     >
       <SearchX className="mx-auto mb-3 h-8 w-8 text-gray-500" aria-hidden="true" />
@@ -103,12 +103,12 @@ const EmptyState: React.FC<{ response: SearchResponse; specialized: boolean }> =
         {useBackendCopy ? (
           <span>
             {response.message} for{' '}
-            <span className="font-medium text-gray-300">&ldquo;{response.query}&rdquo;</span>.
+            <span className="font-medium text-seek-ink">&ldquo;{response.query}&rdquo;</span>.
           </span>
         ) : (
           <span>
             Nothing matched{' '}
-            <span className="font-medium text-gray-300">&ldquo;{response.query}&rdquo;</span>{' '}
+            <span className="font-medium text-seek-ink">&ldquo;{response.query}&rdquo;</span>{' '}
             strongly enough to rank. Try more specific terms or check the spelling.
           </span>
         )}
@@ -143,7 +143,7 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ response, modeResp
           <>
             <p className="mb-4 px-1 text-xs text-gray-400" role="status" aria-live="polite">
               {response.total} result{response.total === 1 ? '' : 's'} for{' '}
-              <span className="font-medium text-blue-300">&ldquo;{response.query}&rdquo;</span>
+              <span className="font-medium text-seek-ink">&ldquo;{response.query}&rdquo;</span>
               <span className="ml-2 text-gray-500">&middot; {response.took_ms.toFixed(0)} ms</span>
             </p>
             {ranked}
@@ -160,12 +160,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ response, modeResp
         role="status"
         aria-live="polite"
       >
-        <span className="rounded-full border border-seek-accent/30 bg-seek-accent/10 px-2.5 py-0.5 font-medium text-blue-300">
+        <span className="rounded-md bg-seek-soft px-2.5 py-1 font-medium text-seek-accent">
           {modeLabel(modeResponse.mode)}
         </span>
         <span>
           {response.total} result{response.total === 1 ? '' : 's'} for{' '}
-          <span className="font-medium text-blue-300">&ldquo;{response.query}&rdquo;</span>
+          <span className="font-medium text-seek-ink">&ldquo;{response.query}&rdquo;</span>
         </span>
         <span className="text-gray-500">&middot; {response.took_ms.toFixed(0)} ms</span>
       </div>

@@ -47,15 +47,15 @@ export const AnswerPanel: React.FC<AnswerPanelProps> = ({ mode, answer, note, pa
   return (
     <section
       aria-label={copy.title}
-      className="rounded-xl border border-seek-border bg-gradient-to-br from-indigo-950/40 via-seek-card to-seek-card p-5 shadow-sm sm:p-6"
+      className="rounded-lg border border-seek-border bg-white p-5 sm:p-6"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-2 rounded-lg bg-indigo-600/20 px-2.5 py-1 text-sm font-semibold text-indigo-200">
+        <span className="inline-flex items-center gap-2 rounded-md bg-seek-soft px-2.5 py-1 text-sm font-medium text-seek-accent">
           <Icon className="h-4 w-4" aria-hidden="true" />
           {copy.title}
         </span>
         {hasAnswer && (
-          <span className="rounded-full border border-emerald-800/60 bg-emerald-950/40 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+          <span className="rounded-md border border-seek-border px-2.5 py-0.5 text-[11px] font-medium text-gray-400">
             grounded in SEEK sources
           </span>
         )}
@@ -71,15 +71,15 @@ export const AnswerPanel: React.FC<AnswerPanelProps> = ({ mode, answer, note, pa
           {answer}
         </p>
       ) : (
-        <div className="mt-4 rounded-lg border border-amber-900/40 bg-amber-950/20 p-4">
-          <p className="flex items-start gap-2 text-sm font-medium text-amber-200">
+        <div className="mt-4 rounded-lg border border-seek-border bg-gray-50 p-4">
+          <p className="flex items-start gap-2 text-sm font-medium text-gray-300">
             <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             No answer could be generated for this query.
           </p>
           {note ? (
-            <p className="mt-1 pl-6 text-sm text-amber-200/80">{note}</p>
+            <p className="mt-1 pl-6 text-sm text-gray-400">{note}</p>
           ) : (
-            <p className="mt-1 pl-6 text-sm text-amber-200/80">
+            <p className="mt-1 pl-6 text-sm text-gray-400">
               SEEK never invents an answer - the reason reported by the backend is shown here
               instead.
             </p>

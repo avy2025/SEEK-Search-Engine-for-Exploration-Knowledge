@@ -27,7 +27,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ hit, mode }) => {
       href={hit.source}
       target="_blank"
       rel="noreferrer"
-      className="text-lg font-semibold text-blue-300 transition-colors hover:text-blue-200 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent focus:rounded"
+      className="text-lg font-semibold text-seek-accent transition-colors hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent focus:rounded"
     >
       {hit.title || hit.document_id}
     </a>
@@ -36,7 +36,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ hit, mode }) => {
   );
 
   return (
-    <article className="rounded-xl border border-seek-border bg-seek-card p-5 shadow-sm transition-colors hover:border-blue-800/60">
+    <article className="rounded-lg border border-seek-border bg-seek-card p-5 transition-colors hover:border-gray-600">
       <div className="flex items-start justify-between gap-3">
         <h2 className="min-w-0">{title}</h2>
         <span className="shrink-0 font-mono text-xs text-gray-500">
@@ -46,7 +46,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ hit, mode }) => {
 
       <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
         {domain ? (
-          <span className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-seek-border bg-seek-dark px-2.5 py-0.5 font-medium text-blue-300/90">
+          <span className="inline-flex max-w-full items-center gap-1 truncate rounded-md bg-seek-soft px-2 py-0.5 font-medium text-seek-accent">
             {domain}
             {isLink && <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />}
           </span>
@@ -56,7 +56,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ hit, mode }) => {
         </span>
         {hit.score > 0 && (
           <span
-            className="ml-auto shrink-0 font-mono text-blue-300/80"
+            className="ml-auto shrink-0 font-mono text-gray-500"
             title={`Relevance score ${hit.score.toFixed(4)}`}
           >
             {hit.score.toFixed(4)}
@@ -69,12 +69,12 @@ export const ResultCard: React.FC<ResultCardProps> = ({ hit, mode }) => {
       </p>
 
       {codeSnippet && (
-        <div className="mt-3 overflow-hidden rounded-lg border border-seek-border bg-[#080c15]">
+        <div className="mt-3 overflow-hidden rounded-lg border border-seek-border bg-gray-50">
           <p className="flex items-center gap-1.5 border-b border-seek-border px-3 py-1.5 text-[11px] font-medium text-gray-500">
             <FileCode2 className="h-3 w-3" aria-hidden="true" />
             Code excerpt from this document
           </p>
-          <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-emerald-200/90">
+          <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-gray-300">
             <code>{codeSnippet}</code>
           </pre>
         </div>
@@ -91,7 +91,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ hit, mode }) => {
           {hit.matched_terms.map((term) => (
             <li
               key={term}
-              className="rounded-md border border-seek-accent/20 bg-seek-accent/10 px-2 py-0.5 font-mono text-[11px] text-blue-300"
+              className="rounded-md bg-seek-soft px-2 py-0.5 font-mono text-[11px] text-seek-accent"
             >
               {term}
             </li>

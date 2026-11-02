@@ -7,12 +7,26 @@ export default {
   theme: {
     extend: {
       colors: {
+        gray: {
+          50: '#fafaf8',
+          100: '#242622',
+          200: '#343632',
+          300: '#4e514c',
+          400: '#656962',
+          500: '#777a74',
+          600: '#8d908a',
+          700: '#a3a59f',
+          800: '#c1c3bd',
+          900: '#e1e2dd'
+        },
         seek: {
-          dark: '#0b0f19',
-          card: '#131b2e',
-          accent: '#3b82f6',
-          purple: '#8b5cf6',
-          border: '#1e293b'
+          dark: '#f7f7f4',
+          card: '#ffffff',
+          accent: '#365c48',
+          ink: '#242622',
+          muted: '#777a74',
+          soft: '#edf2ed',
+          border: '#e4e6e0'
         }
       }
     },

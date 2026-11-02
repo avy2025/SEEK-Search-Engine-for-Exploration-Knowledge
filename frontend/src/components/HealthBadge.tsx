@@ -13,21 +13,21 @@ const STATUS_LABEL: Record<BackendStatus, string> = {
 };
 
 const STATUS_DOT: Record<BackendStatus, string> = {
-  checking: 'bg-amber-400',
-  connected: 'bg-emerald-400',
-  disconnected: 'bg-rose-500',
+  checking: 'bg-gray-500',
+  connected: 'bg-seek-accent',
+  disconnected: 'bg-gray-500',
 };
 
 const STATUS_TEXT: Record<BackendStatus, string> = {
-  checking: 'text-amber-400',
-  connected: 'text-emerald-400',
-  disconnected: 'text-rose-400',
+  checking: 'text-gray-400',
+  connected: 'text-gray-400',
+  disconnected: 'text-gray-400',
 };
 
 /** Compact backend connectivity indicator (Phase 1 feature, kept in Phase 3). */
 export const HealthBadge: React.FC<HealthBadgeProps> = ({ status }) => (
   <span
-    className="inline-flex items-center gap-2 rounded-full border border-seek-border bg-seek-card px-3 py-1.5 text-xs font-medium"
+    className="inline-flex items-center gap-2 text-xs"
     title="FastAPI backend connectivity"
   >
     <span

@@ -46,11 +46,11 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({ mode, sources, colla
   return (
     <section
       aria-label="Sources"
-      className="rounded-xl border border-seek-border bg-seek-card p-5 shadow-sm"
+      className="rounded-lg border border-seek-border bg-white p-5"
     >
       <details open={!collapsible} className="group">
         <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md text-sm font-semibold text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent">
-          <Quote className="h-4 w-4 text-indigo-300" aria-hidden="true" />
+          <Quote className="h-4 w-4 text-seek-accent" aria-hidden="true" />
           <span>
             Sources
             <span className="ml-2 font-mono text-xs font-normal text-gray-500">
@@ -76,7 +76,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({ mode, sources, colla
                 {!domain && <span className="truncate font-mono" title={source.source}>{source.source}</span>}
                 {domain && <span className="truncate font-mono" title={source.source}>{rest}</span>}
                 {source.score > 0 && (
-                  <span className="ml-auto shrink-0 font-mono text-blue-300/70">
+                  <span className="ml-auto shrink-0 font-mono text-gray-500">
                     {source.score.toFixed(4)}
                   </span>
                 )}
@@ -87,11 +87,11 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({ mode, sources, colla
             return (
               <li
                 key={key}
-                className="rounded-lg border border-seek-border bg-seek-dark/50 px-3 py-2.5"
+                className="rounded-md border border-seek-border bg-gray-50 px-3 py-2.5"
               >
                 <div className="flex items-start gap-2.5">
                   <span
-                    className="mt-0.5 inline-flex h-5 shrink-0 items-center justify-center rounded-md bg-indigo-600/20 px-1.5 font-mono text-[11px] font-semibold text-indigo-200"
+                    className="mt-0.5 inline-flex h-5 shrink-0 items-center justify-center rounded-md bg-seek-soft px-1.5 font-mono text-[11px] font-semibold text-seek-accent"
                     aria-hidden="true"
                   >
                     {source.citation_id ?? index + 1}
@@ -103,7 +103,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({ mode, sources, colla
                           href={source.source}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex min-w-0 flex-1 items-center gap-1.5 truncate font-medium text-blue-300 transition-colors hover:text-blue-200 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent focus:rounded"
+                          className="inline-flex min-w-0 flex-1 items-center gap-1.5 truncate font-medium text-seek-accent transition-colors hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent focus:rounded"
                         >
                           {label}
                           <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />

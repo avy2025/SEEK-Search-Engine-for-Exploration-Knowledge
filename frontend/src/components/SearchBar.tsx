@@ -31,7 +31,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     <form
       role="search"
       onSubmit={handleSubmit}
-      className="w-full max-w-2xl"
+      className="w-full max-w-3xl"
       aria-label="Search SEEK"
     >
       <label htmlFor="seek-search-input" className="sr-only">
@@ -56,13 +56,13 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             enterKeyHint="search"
             disabled={loading}
             placeholder="Search the index…"
-            className="w-full rounded-xl border border-seek-border bg-seek-card py-3.5 pl-12 pr-4 text-gray-100 shadow-sm outline-none transition focus:border-seek-accent focus:ring-2 focus:ring-seek-accent/40 focus-visible:ring-2 placeholder:text-gray-500 disabled:opacity-60"
+            className="w-full rounded-lg border border-seek-border bg-white py-4 pl-12 pr-4 text-seek-ink outline-none transition placeholder:text-gray-500 focus:border-seek-accent focus-visible:ring-2 focus-visible:ring-seek-accent disabled:opacity-60"
           />
         </div>
         <button
           type="submit"
           disabled={loading}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3.5 font-semibold text-white shadow-sm transition hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-seek-accent px-5 py-3.5 text-sm font-medium text-white transition-colors hover:bg-[#2d4d3c] focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? (
             <>

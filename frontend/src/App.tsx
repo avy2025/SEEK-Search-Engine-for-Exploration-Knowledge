@@ -134,22 +134,23 @@ export const App: React.FC = () => {
   const modeResponse = results ? asModeResponse(results) : null;
 
   return (
-    <div className="flex min-h-screen flex-col bg-seek-dark text-gray-100 antialiased">
+    <div className="flex min-h-screen flex-col bg-seek-dark text-seek-ink antialiased">
       <Header backendStatus={backendStatus} onHome={goHome} />
 
-      <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col px-4 py-6 sm:px-6">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-5 py-8 sm:px-8">
         {view === 'landing' ? (
-          <section className="flex flex-1 flex-col items-center justify-center text-center">
-            <h1 className="text-5xl font-extrabold tracking-tight">
-              <span className="bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-500 bg-clip-text text-transparent">
-                SEEK
-              </span>
+          <section className="flex flex-1 flex-col items-center justify-center pb-16 pt-8 text-center sm:pb-24">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-seek-accent">
+              Search &amp; discovery
+            </p>
+            <h1 className="mt-5 max-w-3xl font-serif text-4xl font-medium leading-tight tracking-tight text-seek-ink sm:text-6xl">
+              Find the knowledge you need.
             </h1>
-            <p className="mt-3 text-lg font-medium text-gray-400">
-              Search Engine for Exploration &amp; Knowledge
+            <p className="mt-4 max-w-xl text-base leading-relaxed text-gray-400 sm:text-lg">
+              One thoughtful search across your sources and documents.
             </p>
 
-            <div className="mt-10 flex w-full flex-col items-center gap-4">
+            <div className="mt-9 flex w-full flex-col items-center gap-5">
               <SearchBar
                 value={query}
                 onChange={setQuery}
@@ -161,10 +162,10 @@ export const App: React.FC = () => {
             </div>
 
             <nav
-              className="mt-8 flex flex-wrap items-center justify-center gap-2"
+              className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-2"
               aria-label="Sample queries"
             >
-              <span className="text-xs text-gray-500">Try:</span>
+              <span className="text-sm text-gray-500">Try searching</span>
               {SAMPLE_QUERIES[mode].map((sample) => (
                 <button
                   key={sample}
@@ -173,25 +174,20 @@ export const App: React.FC = () => {
                     setQuery(sample);
                     handleSearch(sample);
                   }}
-                  className="rounded-full border border-seek-border bg-seek-card px-3 py-1.5 text-xs text-gray-300 transition hover:border-seek-accent/50 hover:text-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
+                  className="rounded-md px-1 py-1 text-sm text-gray-400 underline decoration-seek-border underline-offset-4 transition-colors hover:text-seek-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
                 >
                   {sample}
                 </button>
               ))}
             </nav>
 
-            <p className="mt-12 max-w-xl text-sm leading-relaxed text-gray-500">
-              Pick a mode above, then type a query and press{' '}
-              <kbd className="rounded border border-seek-border bg-seek-card px-1.5 py-0.5 font-mono text-xs text-gray-300">
-                Enter
-              </kbd>
-              . Every mode runs real retrieval over the SEEK corpus — the active mode is kept in
-              the URL, so results are shareable and survive a refresh.
+            <p className="mt-12 max-w-lg text-sm leading-relaxed text-gray-500">
+              Choose a search mode, enter a question or topic, and explore what SEEK finds.
             </p>
           </section>
         ) : (
-          <section aria-label="Search" className="flex flex-col gap-5">
-            <div className="flex flex-col items-center gap-4">
+          <section aria-label="Search" className="flex flex-col gap-8">
+            <div className="flex flex-col items-center gap-2">
               <SearchBar
                 value={query}
                 onChange={setQuery}
@@ -208,7 +204,7 @@ export const App: React.FC = () => {
                 role="status"
                 aria-live="polite"
               >
-                <Loader2 className="h-6 w-6 animate-spin text-blue-400" aria-hidden="true" />
+                <Loader2 className="h-6 w-6 animate-spin text-seek-accent" aria-hidden="true" />
                 <p className="text-sm">
                   Searching &ldquo;{activeQuery}&rdquo; &middot; {modeLabel(mode)}&hellip;
                 </p>
@@ -221,17 +217,17 @@ export const App: React.FC = () => {
 
             {view === 'error' && (
               <div
-                className="mx-auto mt-10 w-full max-w-2xl rounded-xl border border-rose-900/50 bg-rose-950/40 p-8 text-center"
+                className="mx-auto mt-10 w-full max-w-2xl rounded-lg border border-seek-border bg-white p-8 text-center"
                 role="alert"
               >
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-rose-900/60">
-                  <WifiOff className="h-6 w-6 text-rose-300" aria-hidden="true" />
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-50">
+                  <WifiOff className="h-6 w-6 text-gray-400" aria-hidden="true" />
                 </div>
-                <h2 className="text-lg font-semibold text-rose-100">
+                <h2 className="text-lg font-semibold text-seek-ink">
                   Unable to reach the SEEK search backend
                 </h2>
-                <p className="mt-2 text-sm text-rose-200/80">{error}</p>
-                <p className="mt-1 text-xs text-rose-300/60">
+                <p className="mt-2 text-sm text-gray-400">{error}</p>
+                <p className="mt-1 text-xs text-gray-400">
                   Make sure the FastAPI backend is running at{' '}
                   <code className="rounded bg-seek-dark px-1.5 py-0.5 font-mono">{apiBaseUrl}</code>{' '}
                   and try again.
@@ -240,7 +236,7 @@ export const App: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleSearch(activeQuery)}
-                    className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                    className="inline-flex items-center gap-2 rounded-lg bg-seek-accent px-4 py-2 text-sm font-medium text-white transition hover:bg-[#2d4d3c] focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent focus-visible:ring-offset-2"
                   >
                     <RotateCcw className="h-4 w-4" aria-hidden="true" />
                     Retry
@@ -248,7 +244,7 @@ export const App: React.FC = () => {
                   <button
                     type="button"
                     onClick={goHome}
-                    className="inline-flex items-center gap-2 rounded-lg border border-seek-border bg-seek-card px-4 py-2 text-sm font-medium text-gray-300 transition hover:text-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
+                    className="inline-flex items-center gap-2 rounded-lg border border-seek-border bg-white px-4 py-2 text-sm font-medium text-gray-300 transition hover:text-seek-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
                   >
                     <Home className="h-4 w-4" aria-hidden="true" />
                     Go home
@@ -261,13 +257,8 @@ export const App: React.FC = () => {
       </main>
 
       <footer className="border-t border-seek-border py-5 text-center text-xs text-gray-500">
-        <p>
-          SEEK &mdash; BM25 &middot; Crawler &middot; Semantic &middot; Hybrid &middot; RAG &middot;
-          Specialized search modes
-        </p>
-        <p className="mt-1 text-gray-600">
-          Mode: {mode === DEFAULT_SEARCH_MODE ? 'Web Search' : mode} &middot; API: {apiBaseUrl}
-        </p>
+        <p>SEEK &middot; A search engine for exploration and knowledge</p>
+        <p className="mt-1 text-gray-500">{mode === DEFAULT_SEARCH_MODE ? 'Web Search' : mode}</p>
       </footer>
     </div>
   );
