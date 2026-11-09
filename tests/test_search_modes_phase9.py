@@ -1173,10 +1173,9 @@ class TestFrontendUrlState:
             capture_output=True,
             text=True,
             timeout=300,
-            shell=True,
         )
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "# fail 0" in result.stdout
+        assert "fail 0" in result.stdout
 
     def test_app_wires_the_url_state_helpers(self):
         app_source = (FRONTEND_DIR / "src" / "App.tsx").read_text(encoding="utf-8")

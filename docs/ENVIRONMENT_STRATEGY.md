@@ -21,7 +21,10 @@ Configuration is loaded through `.env` files using `pydantic-settings` in Python
    - `BM25_K1` & `BM25_B`: BM25 hyper-parameters.
    - `EMBEDDING_MODEL`: Local HuggingFace SentenceTransformer model string.
 5. **AI / RAG Controls**:
-   - `RAG_ENABLED`: Boolean toggle (`false` by default to preserve computational resources).
+   - `RAG_ENABLED`: Boolean toggle (enabled by default).
+   - `RAG_LLM_PROVIDER`: `fake` (offline default), `ollama`, or `transformers`.
+   - `RAG_OLLAMA_HOST` / `RAG_OLLAMA_MODEL`: Local Ollama endpoint and model.
+   - `RAG_TRANSFORMERS_MODEL`: Local Hugging Face model identifier.
 
 ---
 

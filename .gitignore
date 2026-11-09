@@ -55,6 +55,9 @@ Thumbs.db
 # Data & Indexes (keep directory structure via .gitkeep)
 data/*
 !data/.gitkeep
+!data/sample_corpus/
+data/sample_corpus/*
+!data/sample_corpus/*.md
 indexes/*
 !indexes/.gitkeep
 

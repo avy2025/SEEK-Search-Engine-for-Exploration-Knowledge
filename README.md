@@ -737,8 +737,8 @@ To verify that the Phase 1 backend service and health checks are functioning cor
    curl -s "http://localhost:8000/api/search?q=docker&mode=hybrid" | python -m json.tool
    ```
    Expected: `mode=hybrid` with a `metadata.hybrid` block reporting the fusion
-   weights used (`WEIGHT_BM25` / `WEIGHT_SEMANTIC` / `WEIGHT_FRESHNESS` /
-   `WEIGHT_AUTHORITY`) and per-hit score provenance; the legacy
+   weights used (`HYBRID_BM25_WEIGHT` / `HYBRID_SEMANTIC_WEIGHT`) and per-hit
+   score provenance; the legacy
    `/api/search?q=<term>` without `mode` still behaves exactly as before.
 
 8. **Phase 8 AI Answer Smoke Test** (no paid API required):

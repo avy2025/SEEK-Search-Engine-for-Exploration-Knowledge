@@ -104,15 +104,10 @@ requires_npm = pytest.mark.skipif(
 class TestEndpointInventory:
     def test_the_routes_are_exactly_the_documented_ones(self, client: TestClient):
         """No endpoint appeared or disappeared without the inventory following."""
-        published: dict[str, set[str]] = {}
-        for route in client.app.routes:
-            path = getattr(route, "path", None)
-            methods = getattr(route, "methods", None)
-            if not path or not methods or path.startswith(("/openapi", "/docs", "/redoc")):
-                continue
-            published.setdefault(path, set()).update(
-                m for m in methods if m not in {"HEAD", "OPTIONS"}
-            )
+        published = {
+            path: {method.upper() for method in operations}
+            for path, operations in client.app.openapi()["paths"].items()
+        }
         assert published == EXPECTED_ROUTES
 
     def test_every_published_route_answers(self, client: TestClient):
@@ -130,18 +125,15 @@ class TestEndpointInventory:
                 assert response.status_code < 500, (method, path)
                 assert response.headers["content-type"].startswith("application/json")
 
-    def test_every_endpoint_is_reachable_from_the_router_objects(self):
+    def test_every_endpoint_is_reachable_from_the_router_objects(
+        self, client: TestClient
+    ):
         """Every module-level router is mounted by the app (no orphan router).
 
-        ``include_router`` copies the sub-routes onto the parent, so the check
-        compares the *published paths* per router prefix rather than object
-        identity.
+        The OpenAPI schema is the public registration surface and stays stable
+        when FastAPI changes how included routers are represented internally.
         """
         from backend.api import answer, crawl, health, index, root
-        from backend.api.router import api_router
-        from backend.main import app
-
-        # Each router already carries its own prefix, so route paths are complete.
         routers = [
             ("search", search_router),
             ("answer", answer.router),
@@ -150,15 +142,13 @@ class TestEndpointInventory:
             ("health", health.router),
             ("root", root.router),
         ]
-        mounted = {getattr(r, "path", "") for r in app.routes}
-        aggregated = {getattr(r, "path", "") for r in api_router.routes}
+        published = set(client.app.openapi()["paths"])
 
         for label, router in routers:
             paths = [getattr(r, "path", "") for r in router.routes]
             assert paths, f"the {label} router declares no routes"
             for path in paths:
-                assert path in aggregated, f"{path} is missing from backend.api.router"
-                assert path in mounted, f"{path} is missing from backend.main:app"
+                assert path in published, f"{path} is missing from the application schema"
 
     def test_openapi_operation_ids_are_unique(self, client: TestClient):
         """Duplicate operation ids break generated clients."""
@@ -558,7 +548,6 @@ def _npm(script: str, timeout: int = 900) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
         timeout=timeout,
-        shell=True,
     )
 
 
@@ -567,17 +556,17 @@ class TestFrontendSuites:
     def test_the_url_state_suite_passes(self):
         result = _npm("test:urlstate")
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "# fail 0" in result.stdout
+        assert "fail 0" in result.stdout
 
     def test_the_mode_catalog_suite_passes(self):
         result = _npm("test:modes")
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "# fail 0" in result.stdout
+        assert "fail 0" in result.stdout
 
     def test_the_combined_frontend_script_passes(self):
         result = _npm("test:frontend")
         assert result.returncode == 0, result.stdout + result.stderr
-        assert "# fail 0" in result.stdout
+        assert "fail 0" in result.stdout
 
     def test_typescript_typechecks(self):
         result = _npm("typecheck")

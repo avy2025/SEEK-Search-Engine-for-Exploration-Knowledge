@@ -5,6 +5,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+ARG VITE_API_BASE_URL=http://localhost:8000
+
 # Copy package manifests first for better layer caching
 COPY package.json ./
 # Copy lockfile if it exists
@@ -14,7 +16,7 @@ RUN npm ci --no-fund --no-audit
 
 COPY . .
 
-RUN node node_modules/vite/bin/vite.js build
+RUN VITE_API_BASE_URL="${VITE_API_BASE_URL}" node node_modules/vite/bin/vite.js build
 
 # ==========================================
 # Stage 2: Serve Web App via Nginx
@@ -27,6 +29,11 @@ server {
     listen 3000;
     server_name localhost;
 
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+
     location / {
         root /usr/share/nginx/html;
         index index.html index.htm;
@@ -34,12 +41,12 @@ server {
     }
 
     # Proxy API calls directly to FastAPI backend service inside Docker network
+    location = /api/health {
+        proxy_pass http://backend:8000/health;
+    }
+
     location /api/ {
-        proxy_pass http://backend:8000/;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_pass http://backend:8000;
     }
 }
 EOF
