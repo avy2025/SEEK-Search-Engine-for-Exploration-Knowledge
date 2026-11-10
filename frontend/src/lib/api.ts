@@ -73,6 +73,25 @@ export interface SearchOptions {
   legacyMode?: LegacySearchMode;
 }
 
+export interface CrawlJobSummary {
+  job_id: string;
+  status: string;
+  pages_crawled: number;
+}
+
+export interface CrawlJobsResponse {
+  jobs: CrawlJobSummary[];
+  total_jobs: number;
+  crawled_documents: number;
+}
+
+export interface CrawlRequest {
+  urls: string[];
+  max_pages: number;
+  max_depth: number;
+  respect_robots: boolean;
+}
+
 const DEFAULT_API_BASE_URL = 'http://localhost:8000';
 
 function resolveBaseUrl(): string {
@@ -93,6 +112,32 @@ async function probe(base: string, path: string, init?: RequestInit): Promise<Re
   return res;
 }
 
+async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, init);
+  } catch {
+    try {
+      response = await fetch(path, init);
+    } catch {
+      throw new Error(`Could not connect to the SEEK backend for ${path}.`);
+    }
+  }
+
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const body = (await response.json()) as { detail?: unknown; message?: unknown };
+      const value = body.detail ?? body.message;
+      if (typeof value === 'string') detail = `: ${value}`;
+    } catch {
+      // The response may not contain JSON; the HTTP status is still actionable.
+    }
+    throw new Error(`Request to ${path} failed with status ${response.status}${detail}`);
+  }
+  return (await response.json()) as T;
+}
+
 export async function fetchHealth(): Promise<HealthStatus> {
   try {
     const res = await probe(apiBaseUrl, '/health', { method: 'GET' });
@@ -102,6 +147,34 @@ export async function fetchHealth(): Promise<HealthStatus> {
     const res = await probe('', '/api/health', { method: 'GET' });
     return (await res.json()) as HealthStatus;
   }
+}
+
+export function fetchCrawlJobs(): Promise<CrawlJobsResponse> {
+  return requestJson<CrawlJobsResponse>('/api/crawl');
+}
+
+export function startCrawl(request: CrawlRequest): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>('/api/crawl', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+}
+
+export function fetchIndexStatus(): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>('/api/index/status');
+}
+
+export function refreshIndex(): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>('/api/index/refresh', { method: 'POST' });
+}
+
+export function rebuildIndex(): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>('/api/index/rebuild', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ include_crawled: true }),
+  });
 }
 
 export async function search(

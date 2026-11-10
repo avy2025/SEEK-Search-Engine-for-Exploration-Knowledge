@@ -78,6 +78,11 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 > supplied by Code Docs. The UI never invents data: every field is taken from the
 > backend envelope.
 
+> **Operations panel**: `components/AdminPanel.tsx` uses the existing crawl and
+> index routes to submit crawl jobs, poll crawl counts and index status, and
+> refresh or rebuild BM25. Crawl jobs remain process-local and are lost on
+> backend restart; the UI states this limitation explicitly.
+
 ### 3.2 API Layer (`backend/api/`)
 - **Framework**: FastAPI (ASGI)
 - **Endpoints**:

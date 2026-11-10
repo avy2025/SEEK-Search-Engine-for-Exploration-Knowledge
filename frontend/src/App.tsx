@@ -4,6 +4,7 @@ import Header from './components/Header';
 import ModeSelector from './components/ModeSelector';
 import SearchBar from './components/SearchBar';
 import SearchResults from './components/SearchResults';
+import AdminPanel from './components/AdminPanel';
 import type { BackendStatus } from './components/HealthBadge';
 import { apiBaseUrl, asModeResponse, fetchHealth, search, type SearchResponse } from './lib/api';
 import { DEFAULT_SEARCH_MODE, modeLabel, type SearchMode } from './lib/modes';
@@ -31,6 +32,7 @@ export const App: React.FC = () => {
   const [results, setResults] = useState<SearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking');
+  const [adminOpen, setAdminOpen] = useState(false);
 
   const checkBackendHealth = useCallback(async () => {
     setBackendStatus('checking');
@@ -138,6 +140,22 @@ export const App: React.FC = () => {
       <Header backendStatus={backendStatus} onHome={goHome} />
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-5 py-8 sm:px-8">
+        <div className="mb-5 flex justify-end">
+          <button
+            type="button"
+            className="rounded-lg border border-seek-border bg-white px-3 py-2 text-sm font-medium text-gray-300 transition hover:text-seek-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
+            aria-expanded={adminOpen}
+            aria-controls="seek-admin-panel"
+            onClick={() => setAdminOpen((open) => !open)}
+          >
+            {adminOpen ? 'Hide sources & indexing' : 'Manage sources & indexing'}
+          </button>
+        </div>
+        {adminOpen && (
+          <div id="seek-admin-panel">
+            <AdminPanel />
+          </div>
+        )}
         {view === 'landing' ? (
           <section className="flex flex-1 flex-col items-center justify-center pb-16 pt-8 text-center sm:pb-24">
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-seek-accent">
