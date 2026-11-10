@@ -12,6 +12,7 @@
 [![Phase 8: RAG Answers](https://img.shields.io/badge/Phase%208-AI%20Answers-Completed-brightgreen.svg)]()
 [![Phase 9: Search Modes](https://img.shields.io/badge/Phase%209-Specialized%20Modes-Completed-brightgreen.svg)]()
 [![Phase 10: Test Suite](https://img.shields.io/badge/Phase%2010-Automated%20Testing%20Suite-Completed-brightgreen.svg)]()
+[![Phase 11: Docker Hardening](https://img.shields.io/badge/Phase%2011-Docker%20Hardening-Completed-brightgreen.svg)]()
 [![Stack: FastAPI + React + Docker](https://img.shields.io/badge/Stack-FastAPI%20%7C%20React%20%7C%20Docker-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
@@ -27,8 +28,8 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## 🚦 Current Project Status
 
-- **Phases 1–10**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler · Persistent Indexing Pipeline · Semantic Search (Local ML Embeddings) · Hybrid Ranking · AI/RAG Answers · Specialized Search Modes · Automated Testing Suite
-- **Phases 11 and 12**: **Phase 11 — Docker Hardening & Optimization** is complete. **Phase 12 — Cloud Deployment Preparation** remains optional roadmap work.
+- **Phases 1–11**: **COMPLETED** — Foundation · Search MVP · Search UI · Controlled Crawler · Persistent Indexing · Semantic Search · Hybrid Ranking · RAG Answers · Specialized Modes · Automated Tests · Docker Hardening.
+- **Remaining roadmap**: Cloud deployment preparation, expanded search evaluation and performance benchmarks, and final documentation polish (Phases 12–14).
 - **Operations UI**: The frontend includes a **Manage sources & indexing** panel for submitting crawl jobs, monitoring job counts, viewing index status, and refreshing or rebuilding the lexical index. Crawl-job history is in memory and does not survive backend restarts.
 - **Continuous integration**: GitHub Actions runs the backend suite, acceptance probe, frontend tests, typecheck, and production build on pushes and pull requests.
 - **Search evaluation**: Run `python scripts/evaluate_search.py` for an offline BM25 baseline against hand-judged queries in `tests/data/search_relevance.json`. The small sample set is a regression aid, not a representative industry benchmark.
@@ -488,84 +489,94 @@ cd frontend && npm run test:frontend && npm run typecheck && npm run build
 
 ---
 
-## ❌ NOT YET IMPLEMENTED
+## ✅ IMPLEMENTED, ADDED, AND STILL TO DO
 
-To keep the development scope clean and strictly phase-aligned, the following components are **NOT** yet implemented:
+### Implemented
 
-- ❌ Multi-stage Docker build optimisation, volume persistence, container health checks and restart policies (Phase 11)
-- ❌ Cloud deployment preparation and production CORS configuration (Phase 12)
-- ❌ Latency/relevance benchmarking and evaluation sets (Phase 13)
-- ❌ Advanced ranking signals / learning-to-rank (Phase 11+)
-- ❌ User accounts, saved searches and personalization (Phase 12+)
-- ❌ Horizontal scaling / multi-node index sharding (Phase 13+)
-- ❌ Public deployment, observability stack and hardening (Phase 14)
+- **Search and ranking**: BM25 lexical retrieval, local Sentence Transformers embeddings with FAISS, hybrid scoring, and the Web / AI / Research / Code modes.
+- **Crawling and indexing**: Domain-scoped crawler with robots.txt support, URL/content deduplication, PostgreSQL document persistence, persisted BM25/FAISS artifacts, and rebuild/refresh/status operations.
+- **Grounded answers**: Optional RAG answer generation with interchangeable local/free LLM providers and source citations.
+- **Search experience**: Responsive React interface, URL-backed search state, keyboard-accessible mode selection, result/source/answer views, and explicit loading/error/degraded states.
+- **Source and index management**: UI for starting crawls, viewing crawl activity and index status, and refreshing or rebuilding the lexical index.
+- **Testing and delivery**: Offline backend and frontend suites, an acceptance probe, GitHub Actions checks, and an initial hand-judged BM25 relevance evaluation.
+- **Containerization**: Docker Compose stack, persistent volumes, container health checks, restart policies, and production-oriented Docker builds.
+
+### Recently added
+
+- **Operations panel** for crawl submission and crawl/index status using the existing backend routes.
+- **BM25 evaluation baseline** at `scripts/evaluate_search.py` with a small query/judgment set under `tests/data/`.
+- **GitHub Actions CI** for pytest, the acceptance probe, frontend tests, TypeScript typechecking, and production build.
+
+### Remaining roadmap work
+
+- **Phase 12 — Cloud deployment preparation (optional)**: document a chosen deployment target, configure production environment variables and CORS, and describe secrets, backups, and deployment operations.
+- **Phase 13 — Evaluation and benchmarking**: expand and review relevance judgments; compare lexical, semantic, hybrid, and specialized modes; measure latency and memory at representative corpus sizes.
+- **Phase 14 — Documentation and final polish**: complete setup/deployment guidance and publish endpoint/architecture documentation.
+- **Operational durability**: persist crawl-job state and support job recovery after backend restarts. Crawl jobs are currently process-local; this is not yet implemented.
+
+User accounts, personalization, multi-node sharding, and learning-to-rank are possible future directions, not currently committed roadmap deliverables.
 
 ---
 
 ## 🏗️ System Architecture
 
+```text
+┌──────────────────────────────────────────────────────────┐
+│ React + TypeScript + Vite UI (port 3000 / Nginx)         │
+│ Search bar · mode selector · results · answers · sources │
+│ Manage sources & indexing · health indicator             │
+└──────────────────────────┬───────────────────────────────┘
+                           │ HTTP / REST
+                           ▼
+┌──────────────────────────────────────────────────────────┐
+│ FastAPI application (port 8000 / Uvicorn)                 │
+│ health · search · answer · crawl jobs · index operations  │
+└───────────────┬──────────────────────────┬───────────────┘
+                │ search                   │ crawl / index
+                ▼                          ▼
+┌──────────────────────────────┐  ┌────────────────────────────┐
+│ Search mode orchestrator     │  │ Controlled crawler          │
+│ web · ai · research · code   │  │ scope · robots · fetch       │
+│ legacy lexical/semantic/     │  │ extract · deduplicate        │
+│ hybrid retrieval modes       │  │ crawl jobs are in-memory     │
+└───────────────┬──────────────┘  └──────────────┬─────────────┘
+                │                                │ documents
+                ▼                                ▼
+┌──────────────────────────────────────────────────────────┐
+│ Shared retrieval and answer services                     │
+│ BM25 · sentence-transformer embeddings + FAISS · hybrid  │
+│ optional RAG synthesis with source citations              │
+└──────────────────────────┬───────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────┐
+│ PostgreSQL document store (canonical persisted documents) │
+│ Derived artifacts: indexes/bm25 and FAISS semantic index  │
+└──────────────────────────────────────────────────────────┘
+
+Build / verification: GitHub Actions → pytest + acceptance probe
+                     + frontend tests + typecheck + Vite build
 ```
 
-   +---------------------------------------+
-   |        React + Vite UI (Phase 3)      |
-   | Search box + mode selector (Phase 9)  |
-   | results / answers / sources panels    |
-   |     (Port 3000 / Nginx Container)     |
-   +-------------------+-------------------+
+### Runtime flow
 
-                       |  HTTP / REST
-                       v
+1. The UI sends a query and selected mode to the FastAPI search route.
+2. The mode orchestrator selects behavior and composes the shared lexical,
+   semantic, hybrid, or RAG services. Retrieval failures are returned as
+   explicit status rather than silently hidden.
+3. Results, source citations, and optional grounded answers are rendered by the
+   UI. Search parameters remain shareable through the URL.
+4. An operator can start a crawl from **Manage sources & indexing**. The
+   crawler respects configured scope and robots.txt rules, extracts and
+   deduplicates pages, and persists documents best-effort; index operations
+   update derived search artifacts.
+5. Crawl-job records are currently in process memory. They are lost on backend
+   restart; durable job storage/recovery remains future work.
 
-   +---------------------------------------+
-   |          FastAPI Gateway              |
-   |     (Port 8000 / Uvicorn Container)   |
-   +---------+-------------------+---------+
-
-             |                   |
-
-+----------------+ +------------------+
-|  GET /health   | |  GET /           |
-| (Health Check) | | (System Meta)    |
-+----------------+ +------------------+
-             |
-             v
-
-+---------------------------------------------------------------------+
-|  GET /api/search?mode=bm25|semantic|hybrid|web|ai|research|code     |
-|  GET /api/search/modes   |   POST /api/answer (Phase 8)             |
-|  /api/crawl (jobs)       |   /api/index/{rebuild,refresh,status}    |
-|  /api/index/semantic/{rebuild,refresh}                              |
-+--------------+----------------------------+-------------------------+
-
-               |                            |
-
-   +----------------------------+     +---------------------------+
-   | Search-mode orchestrator   |     | Crawler pipeline (Phase 4) |
-   | api/mode_orchestrator (9)  |     | seeds -> robots -> fetch  |
-   | search/modes.py (9)        |     | extract -> chunk -> dedup |
-   | limits / weights / post-proc|    | seeds the canonical corpus|
-   +-----------+----------------+     +-----+---------------------+
-
-               |                            |
-               v                            v
-
-+--------------+----------------------------+-------------------------+
-| Retrieval + ranking services shared by every mode (reuse, no fork)    |
-|   BM25 (Phase 5)  |  semantic + FAISS (6)  |  hybrid fusion (7)       |
-|   RAG answer engine (Phase 8, optional synthesis layer)              |
-+--------------+----------------------------+-------------------------+
-
-               |                            |
-               v                            v
-
-   +----------------------------+     +---------------------------+
-   | BM25 engine (Phase 5)      |     | Semantic engine (Phase 6) |
-   | canonical: PostgreSQL      |     | FAISS IndexFlatIP         |
-   | artifact: indexes/         |     | artifact: indexes/        |
-   | bm25/index.pkl             |     | faiss_index.bin           |
-   +----------------------------+     +---------------------------+
-
-```
+The diagram describes the intended persistent-index path: PostgreSQL is the
+canonical document source and BM25/FAISS files are derived artifacts. When
+PostgreSQL is unavailable, the lexical index has a documented local-corpus
+fallback; semantic rebuild requires the persistent document source.
 
 > **Search modes are an orchestration layer, not a parallel retrieval stack
 > (Phase 9).** The `web`, `ai`, `research` and `code` modes reuse exactly the same
@@ -589,7 +600,7 @@ To keep the development scope clean and strictly phase-aligned, the following co
 | **Crawler** | httpx, asyncio, BeautifulSoup4, robotparser | Controlled async crawling + extraction |
 | **Embeddings** | sentence-transformers (all-MiniLM-L6-v2) | Local 384-dim semantic embeddings |
 | **Vector Search** | faiss-cpu | Persistent FAISS semantic index (`IndexFlatIP`) |
-| **Database** | PostgreSQL 16 Alpine | Persistent metadata and crawl queue storage |
+| **Database** | PostgreSQL 16 Alpine | Canonical persisted document store; crawl-job registry is currently in memory |
 | **Containerization** | Docker, Docker Compose, Nginx | Reproducible containerized stack |
 | **Testing** | Pytest, FastAPI TestClient, Httpx, `node:test` | Automated unit, API, integration, persistence, security and regression suites (Phase 10) |
 
