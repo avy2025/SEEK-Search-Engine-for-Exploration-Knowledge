@@ -1,0 +1,41 @@
+[
+  {
+    "query": "how does BM25 rank documents",
+    "relevance": {
+      "information_retrieval": 2,
+      "search_engines": 1
+    }
+  },
+  {
+    "query": "FAISS vector embeddings similarity search",
+    "relevance": {
+      "faiss": 2,
+      "machine_learning": 1
+    }
+  },
+  {
+    "query": "robots.txt crawler politeness",
+    "relevance": {
+      "web_crawling": 2
+    }
+  },
+  {
+    "query": "docker compose build container image",
+    "relevance": {
+      "docker": 2
+    }
+  },
+  {
+    "query": "natural language processing NLTK tokenization",
+    "relevance": {
+      "natural_language_processing": 2,
+      "python": 1
+    }
+  },
+  {
+    "query": "database SQLAlchemy PostgreSQL persistence",
+    "relevance": {
+      "databases": 2
+    }
+  }
+]

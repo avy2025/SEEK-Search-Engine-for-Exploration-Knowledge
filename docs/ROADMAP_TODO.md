@@ -135,8 +135,9 @@
 ---
 
 ### [ ] Phase 13: Evaluation & Benchmarking
-- [ ] Benchmark query latency and memory consumption.
-- [ ] Evaluate search relevance using sample test query sets.
+- [ ] Benchmark query latency and memory consumption across corpus sizes.
+- [x] Add an offline BM25 relevance-evaluation baseline with hand-judged sample queries (`python scripts/evaluate_search.py`).
+- [ ] Expand/review relevance judgments and compare lexical, semantic, hybrid, and specialized modes before ranking changes.
 
 ---
 
