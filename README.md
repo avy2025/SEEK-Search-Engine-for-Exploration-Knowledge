@@ -28,7 +28,10 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 ## 🚦 Current Project Status
 
 - **Phases 1–10**: **COMPLETED** — Foundation · Search MVP (BM25) · Search UI · Controlled Web Crawler · Persistent Indexing Pipeline · Semantic Search (Local ML Embeddings) · Hybrid Ranking · AI/RAG Answers · Specialized Search Modes · Automated Testing Suite
-- **Current Phase**: **Phase 11 — Docker Hardening & Optimization** `[IN PROGRESS]` — Hardened Dockerfiles with multi-stage builds, added persistent volumes (Postgres + data/indexes/HF cache), improved health checks and restart policies.
+- **Phases 11 and 12**: **Phase 11 — Docker Hardening & Optimization** is complete. **Phase 12 — Cloud Deployment Preparation** remains optional roadmap work.
+- **Operations UI**: The frontend includes a **Manage sources & indexing** panel for submitting crawl jobs, monitoring job counts, viewing index status, and refreshing or rebuilding the lexical index. Crawl-job history is in memory and does not survive backend restarts.
+- **Continuous integration**: GitHub Actions runs the backend suite, acceptance probe, frontend tests, typecheck, and production build on pushes and pull requests.
+- **Search evaluation**: Run `python scripts/evaluate_search.py` for an offline BM25 baseline against hand-judged queries in `tests/data/search_relevance.json`. The small sample set is a regression aid, not a representative industry benchmark.
 
 ---
 
@@ -479,7 +482,7 @@ Run it:
 
 ```bash
 python -m pytest -q                  # everything
-python scripts/probe_phase2.py       # phase acceptance gate: 18/18 imports + a real query
+python -m scripts.probe_phase2       # phase acceptance gate: 18/18 imports + a real query
 cd frontend && npm run test:frontend && npm run typecheck && npm run build
 ```
 
@@ -642,7 +645,7 @@ pip install -r requirements.txt
 python -m pytest -q
 
 # Run the Phase 2 acceptance probe (18/18 imports + a real query)
-python scripts/probe_phase2.py
+python -m scripts.probe_phase2
 
 # Run FastAPI backend with Uvicorn
 python backend/main.py
@@ -780,7 +783,7 @@ To verify that the Phase 1 backend service and health checks are functioning cor
     # Backend + API + integration + security + regression
     python -m pytest -q
     # Phase 2 acceptance probe (imports, app build, one real query)
-    python scripts/probe_phase2.py
+    python -m scripts.probe_phase2
     # Frontend suites, typecheck and production build
     cd frontend && npm run test:frontend && npm run typecheck && npm run build
     ```
@@ -789,13 +792,20 @@ To verify that the Phase 1 backend service and health checks are functioning cor
     commands exit `0`. The coverage matrix and the list of deliberate gaps are in
     [`docs/TESTING_PHASE10.md`](docs/TESTING_PHASE10.md).
 
+11. **Search Relevance Baseline** (offline, committed sample corpus):
+    ```bash
+    python scripts/evaluate_search.py
+    ```
+    Expected: per-query and macro-average Precision@5, Recall@5, MRR@5 and
+    nDCG@5. The relevance judgments are a small, manually curated regression
+    set; expand and review them before using scores to make ranking decisions.
+
 ---
 
 ## 🔮 Next Planned Phase
 
-**Phase 11: Docker Hardening & Optimization** — multi-stage build optimisation,
-named volumes for PostgreSQL data and the index directories, and container health
-checks with restart policies.
+**Phase 12: Cloud Deployment Preparation (optional)** — deployment guidance,
+production environment configuration, and CORS/secret-handling recommendations.
 
 ---
 
