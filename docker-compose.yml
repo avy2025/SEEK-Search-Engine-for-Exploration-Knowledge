@@ -42,6 +42,16 @@ services:
       - TAVILY_READ_TIMEOUT_SECONDS=${TAVILY_READ_TIMEOUT_SECONDS:-15}
       - TAVILY_CACHE_TTL_SECONDS=${TAVILY_CACHE_TTL_SECONDS:-600}
       - TAVILY_USAGE_DB_PATH=/app/indexes/tavily_usage.sqlite3
+      # Gemini credentials and controls stay backend-only; usage persists on seek_indexes.
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      - GEMINI_CONNECT_TIMEOUT_SECONDS=${GEMINI_CONNECT_TIMEOUT_SECONDS:-3}
+      - GEMINI_READ_TIMEOUT_SECONDS=${GEMINI_READ_TIMEOUT_SECONDS:-30}
+      - GEMINI_DAILY_REQUEST_LIMIT=${GEMINI_DAILY_REQUEST_LIMIT:-30}
+      - GEMINI_MAX_SOURCES=${GEMINI_MAX_SOURCES:-5}
+      - GEMINI_MAX_CONTEXT_CHARS=${GEMINI_MAX_CONTEXT_CHARS:-12000}
+      - GEMINI_CACHE_TTL_SECONDS=${GEMINI_CACHE_TTL_SECONDS:-600}
+      - GEMINI_USAGE_DB_PATH=/app/indexes/gemini_usage.sqlite3
       # Local embedding-model cache (Phase 6); the all-MiniLM-L6-v2 download is
       # persisted here so container rebuilds do not re-download it.
       - HF_HOME=/app/.huggingface

@@ -94,6 +94,17 @@ class Settings(BaseSettings):
     TAVILY_CACHE_TTL_SECONDS: int = Field(default=600, ge=0, le=86_400)
     TAVILY_USAGE_DB_PATH: str = "./indexes/tavily_usage.sqlite3"
 
+    # --- Phase 13 Gemini grounded live answers ---
+    GEMINI_API_KEY: SecretStr = SecretStr("")
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_CONNECT_TIMEOUT_SECONDS: float = Field(default=3.0, gt=0, le=60)
+    GEMINI_READ_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, le=120)
+    GEMINI_DAILY_REQUEST_LIMIT: int = Field(default=30, ge=1, le=30)
+    GEMINI_MAX_SOURCES: int = Field(default=5, ge=1, le=5)
+    GEMINI_MAX_CONTEXT_CHARS: int = Field(default=12_000, ge=1000, le=12_000)
+    GEMINI_CACHE_TTL_SECONDS: int = Field(default=600, ge=0, le=86_400)
+    GEMINI_USAGE_DB_PATH: str = "./indexes/gemini_usage.sqlite3"
+
     # --- Phase 4 Controlled Web Crawler ---
     CRAWLER_ALLOWED_DOMAINS: str = ""
     CRAWLER_MAX_DEPTH: int = 2
