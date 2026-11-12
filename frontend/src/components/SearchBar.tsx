@@ -7,6 +7,8 @@ interface SearchBarProps {
   loading: boolean;
   autoFocus: boolean;
   onSearch: (query: string) => void;
+  searchLabel?: string;
+  placeholder?: string;
 }
 
 /**
@@ -19,6 +21,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   loading,
   autoFocus,
   onSearch,
+  searchLabel = 'Search the SEEK index',
+  placeholder = 'Search the index…',
 }) => {
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -32,10 +36,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       role="search"
       onSubmit={handleSubmit}
       className="w-full max-w-3xl"
-      aria-label="Search SEEK"
+      aria-label={searchLabel}
     >
       <label htmlFor="seek-search-input" className="sr-only">
-        Search the SEEK index
+        {searchLabel}
       </label>
       <div className="flex w-full items-stretch gap-2">
         <div className="relative flex-1">
@@ -55,7 +59,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             spellCheck={false}
             enterKeyHint="search"
             disabled={loading}
-            placeholder="Search the index…"
+            placeholder={placeholder}
             className="w-full rounded-lg border border-seek-border bg-white py-4 pl-12 pr-4 text-seek-ink outline-none transition placeholder:text-gray-500 focus:border-seek-accent focus-visible:ring-2 focus-visible:ring-seek-accent disabled:opacity-60"
           />
         </div>

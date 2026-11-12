@@ -1,18 +1,19 @@
 import React, { useRef } from 'react';
-import { BookOpen, BrainCircuit, FlaskConical, Search } from 'lucide-react';
-import { MODE_OPTIONS, type SearchMode } from '../lib/modes';
+import { BookOpen, BrainCircuit, FlaskConical, Globe2, Search } from 'lucide-react';
+import { MODE_OPTIONS, type AppSearchMode } from '../lib/modes';
 
 interface ModeSelectorProps {
-  value: SearchMode;
-  onChange: (mode: SearchMode) => void;
+  value: AppSearchMode;
+  onChange: (mode: AppSearchMode) => void;
   disabled?: boolean;
 }
 
-const MODE_ICON: Record<SearchMode, React.ComponentType<{ className?: string }>> = {
+const MODE_ICON: Record<AppSearchMode, React.ComponentType<{ className?: string }>> = {
   web: Search,
   ai: BrainCircuit,
   research: FlaskConical,
   code: BookOpen,
+  live: Globe2,
 };
 
 /**
@@ -26,7 +27,7 @@ const MODE_ICON: Record<SearchMode, React.ComponentType<{ className?: string }>>
 export const ModeSelector: React.FC<ModeSelectorProps> = ({ value, onChange, disabled }) => {
   const buttons = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  const focusMode = (mode: SearchMode) => {
+  const focusMode = (mode: AppSearchMode) => {
     buttons.current[mode]?.focus();
   };
 
@@ -64,7 +65,7 @@ export const ModeSelector: React.FC<ModeSelectorProps> = ({ value, onChange, dis
         role="radiogroup"
         aria-label="SEEK search mode"
         onKeyDown={handleKeyDown}
-        className="flex w-full gap-1 overflow-x-auto border-b border-seek-border py-1 sm:w-auto sm:overflow-visible"
+        className="flex w-full gap-1 overflow-x-auto border-b border-seek-border py-1 lg:w-auto lg:overflow-visible"
       >
         {MODE_OPTIONS.map((option) => {
           const Icon = MODE_ICON[option.id];

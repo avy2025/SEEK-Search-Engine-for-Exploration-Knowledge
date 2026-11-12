@@ -91,10 +91,15 @@ python scripts/probe_phase2.py
 
 # Frontend suites, typecheck and production build
 cd frontend
-npm run test:frontend     # runs test:urlstate then test:modes
+npm run test:frontend     # runs all frontend suites
 npm run typecheck
 npm run build
 ```
+
+Phase 12 adds `tests/test_tavily_phase12.py` and
+`frontend/tests/liveSearch.test.mjs`. They use `httpx.MockTransport` and Node's
+built-in test runner; they make no real Tavily calls and cannot spend API
+credits. The frontend aggregate also runs `test:live-search`.
 
 Running from the repository root matters: the test modules import `backend.*`
 directly and `from conftest import ...`, so no packaging step or install is

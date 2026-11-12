@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -85,6 +86,13 @@ class Settings(BaseSettings):
     # always returns up to ``limit`` documents (unmatched ones score 0.0), so the
     # specialized modes drop those instead of reporting them as results.
     MODE_MATCH_SCORE_FLOOR: float = 0.0
+
+    # --- Phase 12 Tavily live internet search ---
+    TAVILY_API_KEY: SecretStr = SecretStr("")
+    TAVILY_CONNECT_TIMEOUT_SECONDS: float = Field(default=3.0, gt=0, le=60)
+    TAVILY_READ_TIMEOUT_SECONDS: float = Field(default=15.0, gt=0, le=120)
+    TAVILY_CACHE_TTL_SECONDS: int = Field(default=600, ge=0, le=86_400)
+    TAVILY_USAGE_DB_PATH: str = "./indexes/tavily_usage.sqlite3"
 
     # --- Phase 4 Controlled Web Crawler ---
     CRAWLER_ALLOWED_DOMAINS: str = ""

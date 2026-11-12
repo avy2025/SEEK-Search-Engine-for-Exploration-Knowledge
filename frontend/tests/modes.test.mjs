@@ -18,6 +18,7 @@ register('./ts-resolve.mjs', import.meta.url);
 
 const {
   DEFAULT_SEARCH_MODE,
+  ALL_SEARCH_MODES,
   MODE_OPTIONS,
   SEARCH_MODES,
   isSearchMode,
@@ -27,8 +28,9 @@ const {
 
 const LEGACY_RETRIEVAL_MODES = ['lexical', 'bm25', 'semantic', 'hybrid'];
 
-test('the catalog holds exactly the four specialized modes', () => {
+test('the local catalog holds exactly the four specialized modes', () => {
   assert.deepEqual([...SEARCH_MODES], ['web', 'ai', 'research', 'code']);
+  assert.deepEqual([...ALL_SEARCH_MODES], ['web', 'ai', 'research', 'code', 'live']);
 });
 
 test('the default mode is part of the catalog', () => {
@@ -36,10 +38,10 @@ test('the default mode is part of the catalog', () => {
   assert.equal(DEFAULT_SEARCH_MODE, 'web');
 });
 
-test('every mode has exactly one option with distinct, non-empty copy', () => {
+test('every UI mode has exactly one option with distinct, non-empty copy', () => {
   assert.deepEqual(
     MODE_OPTIONS.map((option) => option.id),
-    [...SEARCH_MODES],
+    [...ALL_SEARCH_MODES],
   );
   const ids = MODE_OPTIONS.map((option) => option.id);
   assert.equal(new Set(ids).size, ids.length, 'mode ids must be unique');
@@ -52,8 +54,8 @@ test('every mode has exactly one option with distinct, non-empty copy', () => {
   assert.equal(new Set(labels).size, labels.length, 'labels must be distinguishable');
 });
 
-test('isSearchMode accepts every specialized mode', () => {
-  for (const mode of SEARCH_MODES) {
+test('isSearchMode accepts every UI mode', () => {
+  for (const mode of ALL_SEARCH_MODES) {
     assert.equal(isSearchMode(mode), true, mode);
   }
 });

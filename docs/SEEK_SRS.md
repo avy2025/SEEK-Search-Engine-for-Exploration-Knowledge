@@ -224,6 +224,12 @@ The complete product is intentionally divided into stages so each stage can be d
 - **FR-32 (Mode Persistence)**: The selected mode shall be reflected in the URL so results are shareable and survive refresh and back/forward navigation.
 - **FR-33 (Mode Accessibility)**: The mode selector shall be keyboard operable and expose appropriate accessibility semantics.
 - **FR-34 (Mode Compatibility)**: Specialized modes shall not alter the pre-existing retrieval mode contracts.
+- **FR-35 (Live Search)**: Users may search public web results directly through an optional provider without crawling or indexing each result.
+- **FR-36 (Live Search Isolation)**: Live search shall use a dedicated provider and endpoint; provider failures shall not silently fall back to local BM25/FAISS search.
+- **FR-37 (Live Search Budget)**: Live search shall use basic-only requests and persistently enforce a concurrent-safe 900-credit SEEK monthly budget.
+- **FR-38 (Live Search Usage)**: The system shall expose monthly allowance, consumed/remaining credits, success/failure counts and last successful search time.
+- **FR-39 (Live Search Cache)**: Successful identical query/filter requests may be cached for a configurable TTL and must be identified as cached.
+- **FR-40 (Live Search Security)**: Provider credentials shall remain backend-only; query, result count and hostname filters shall be validated.
 
 ---
 
@@ -245,6 +251,7 @@ The complete product is intentionally divided into stages so each stage can be d
 - **NFR-15 (Offline Testability)**: The Phase 10 test suite shall run without paid APIs, external model downloads or a live database. Tests requiring real infrastructure shall skip cleanly rather than fail.
 - **NFR-16 (Documented Coverage)**: The automated test suite shall be accompanied by a coverage matrix naming, per feature, the tests that protect it and the gaps that are deliberate. No coverage percentage shall be published without an actual measurement run.
 - **NFR-17 (Structured Degradation)**: No user-facing failure path shall return an unhandled 5xx; unavailable or degraded capability shall be reported through the documented structured status (`ok` / `degraded` / `unavailable` / `error`).
+- **NFR-18 (Optional Live Provider Cost)**: The local search experience shall remain usable without Tavily. Live search is restricted to the free plan and SEEK-side monthly budget; account-wide billing controls remain the operator's responsibility.
 
 ---
 
@@ -261,6 +268,7 @@ The complete product is intentionally divided into stages so each stage can be d
 | **Vector Search** | FAISS or ChromaDB | Similarity retrieval | Free/open source |
 | **Database** | PostgreSQL | Persistent metadata/application data | Free/open source |
 | **AI/RAG** | Open-source model / Free API | Optional natural-language answers | Optional |
+| **Live web search** | Tavily Search REST API | Optional, basic search only with SEEK budget | Free-plan only |
 | **Containers** | Docker + Docker Compose | Reproducible development/deployment | Free |
 | **Version Control** | Git + GitHub | Source control | Free tier |
 
@@ -297,7 +305,7 @@ The weights are configurable and will be tuned experimentally using a small rele
 - **Phase 9 – Search Modes**: Add optional Web, AI, Research and Code modes.
 - **Phase 10 – Testing**: Build unit, integration, API, crawler and ranking tests.
 - **Phase 11 – Docker Hardening**: Optimize images, volumes, health checks and configuration.
-- **Phase 12 – Cloud**: Deploy only after local stability using eligible free resources.
+- **Phase 12 – Live Internet Search**: Add optional basic-only Tavily search with backend-only credentials, a persistent 900-credit application budget, caching and explicit failure reporting.
 - **Phase 13 – Evaluation**: Measure relevance, latency, crawl throughput and resource usage.
 - **Phase 14 – Documentation**: README, setup guide, architecture, API documentation and demonstration.
 

@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 11 (Docker Hardening & Optimization) - **COMPLETED**  
-> **Next Recommended Phase**: Phase 12 (Cloud Deployment Preparation)
+> **Current Phase**: Phase 12 (Live Internet Search with Tavily) - **IMPLEMENTED**
+> **Next Recommended Phase**: Phase 13 (Evaluation & Benchmarking)
 
 ---
 
@@ -128,9 +128,18 @@
 
 ---
 
-### [ ] Phase 12: Cloud Deployment Preparation (Optional)
-- [ ] Document free-tier cloud deployment steps (Render / Railway / Fly.io / Educational Cloud).
-- [ ] Configure production CORS and environment variable overrides.
+### [x] Phase 12: Live Internet Search Integration (Tavily)
+- [x] Add an independent async Tavily provider and dedicated `POST /api/live-search` route; preserve the local search and crawler paths.
+- [x] Support validated hostname filters, basic-only requests, provider-specific errors and normalized original-source results.
+- [x] Enforce a fixed 900-credit SEEK monthly budget with persistent, atomic SQLite reservations and usage reporting.
+- [x] Cache successful identical searches for a configurable 10-minute TTL and label cache hits.
+- [x] Add a responsive Live Internet Search mode, result display, domain filters, loading/errors and visible remaining credits.
+- [x] Document free-plan-only setup, backend-only credentials, API, Docker persistence and mocked test instructions.
+- [x] Add offline mocked provider/API/budget/cache tests; existing local modes and indexes remain independent.
+
+> **Billing boundary**: SEEK caps its own monthly use at 900 credits and never
+> upgrades or enables paid usage. This is not an account-wide Tavily safeguard;
+> use the free plan and provider-side controls where offered.
 
 ---
 

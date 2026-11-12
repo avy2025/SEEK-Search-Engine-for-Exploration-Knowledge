@@ -72,6 +72,15 @@ test('mode-only URLs preserve the landing-page choice', () => {
   assert.deepEqual(parseSearchState(path.slice(1)), { query: '', mode: 'ai' });
 });
 
+test('live mode is deep-linkable without changing local search mode IDs', () => {
+  const path = buildSearchPath({ query: 'latest discoveries', mode: 'live' });
+  assert.equal(path, '/?q=latest+discoveries&mode=live');
+  assert.deepEqual(parseSearchState(path.slice(1)), {
+    query: 'latest discoveries',
+    mode: 'live',
+  });
+});
+
 test('unknown modes fall back to the default instead of breaking the app', () => {
   const state = parseSearchState('?q=python&mode=bogus');
   assert.equal(state.mode, DEFAULT_SEARCH_MODE);

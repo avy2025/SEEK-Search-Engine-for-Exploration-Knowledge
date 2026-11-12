@@ -5,18 +5,31 @@ import ModeSelector from './components/ModeSelector';
 import SearchBar from './components/SearchBar';
 import SearchResults from './components/SearchResults';
 import AdminPanel from './components/AdminPanel';
+import LiveSearchFilters from './components/LiveSearchFilters';
+import LiveSearchResults, { LiveSearchBudget } from './components/LiveSearchResults';
 import type { BackendStatus } from './components/HealthBadge';
-import { apiBaseUrl, asModeResponse, fetchHealth, search, type SearchResponse } from './lib/api';
-import { DEFAULT_SEARCH_MODE, modeLabel, type SearchMode } from './lib/modes';
+import {
+  apiBaseUrl,
+  asModeResponse,
+  fetchHealth,
+  fetchLiveSearchUsage,
+  liveSearch,
+  LiveSearchError,
+  search,
+  type LiveSearchResponse,
+  type SearchResponse,
+} from './lib/api';
+import { DEFAULT_SEARCH_MODE, modeLabel, type AppSearchMode } from './lib/modes';
 import { buildSearchPath, parseSearchState } from './lib/urlState';
 
 type View = 'landing' | 'loading' | 'results' | 'error';
 
-const SAMPLE_QUERIES: Record<SearchMode, readonly string[]> = {
+const SAMPLE_QUERIES: Record<AppSearchMode, readonly string[]> = {
   web: ['docker container', 'machine learning', 'odoo erp', 'natural language'],
   ai: ['how does SEEK rank documents?', 'what is hybrid search?', 'why BM25?'],
   research: ['search engine ranking', 'information retrieval evaluation'],
   code: ['faiss_store.SearchEngine', 'backend/api/search.py', 'create_engine()'],
+  live: ['current technology news', 'Python documentation', 'latest space discoveries'],
 };
 
 export const App: React.FC = () => {
@@ -26,13 +39,29 @@ export const App: React.FC = () => {
   const didInitialSearch = useRef(false);
 
   const [query, setQuery] = useState(initial.current.query);
-  const [mode, setMode] = useState<SearchMode>(initial.current.mode);
+  const [mode, setMode] = useState<AppSearchMode>(initial.current.mode);
   const [activeQuery, setActiveQuery] = useState(initial.current.query);
   const [view, setView] = useState<View>(initial.current.query ? 'loading' : 'landing');
-  const [results, setResults] = useState<SearchResponse | null>(null);
+  const [results, setResults] = useState<SearchResponse | LiveSearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [includeDomains, setIncludeDomains] = useState('');
+  const [excludeDomains, setExcludeDomains] = useState('');
+  const [liveUsage, setLiveUsage] = useState<Awaited<ReturnType<typeof fetchLiveSearchUsage>> | null>(null);
+  const [liveUsageError, setLiveUsageError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking');
   const [adminOpen, setAdminOpen] = useState(false);
+
+  const refreshLiveUsage = useCallback(async () => {
+    try {
+      const usage = await fetchLiveSearchUsage();
+      setLiveUsage(usage);
+      setLiveUsageError(null);
+    } catch {
+      setLiveUsage(null);
+      setLiveUsageError('SEEK live-search budget status is temporarily unavailable.');
+    }
+  }, []);
 
   const checkBackendHealth = useCallback(async () => {
     setBackendStatus('checking');
@@ -50,19 +79,37 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [checkBackendHealth]);
 
-  const runSearch = useCallback(async (q: string, searchMode: SearchMode) => {
+  useEffect(() => {
+    if (mode === 'live') void refreshLiveUsage();
+  }, [mode, refreshLiveUsage]);
+
+  const runSearch = useCallback(async (q: string, searchMode: AppSearchMode) => {
     setActiveQuery(q);
     setView('loading');
     setError(null);
+    setErrorCode(null);
     try {
-      const response = await search(q, { mode: searchMode });
-      setResults(response);
+      const parseDomains = (value: string) =>
+        value.split(',').map((domain) => domain.trim()).filter(Boolean);
+      if (searchMode === 'live') {
+        const response = await liveSearch(q, {
+          include_domains: parseDomains(includeDomains),
+          exclude_domains: parseDomains(excludeDomains),
+        });
+        setResults(response);
+        setLiveUsage(response.usage);
+        setLiveUsageError(null);
+      } else {
+        setResults(await search(q, { mode: searchMode }));
+      }
       setView('results');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The search request failed.');
+      setErrorCode(err instanceof LiveSearchError ? err.code : null);
       setView('error');
+      if (searchMode === 'live') void refreshLiveUsage();
     }
-  }, []);
+  }, [excludeDomains, includeDomains, refreshLiveUsage]);
 
   /** Submit a query in the currently selected mode and record it in history. */
   const handleSearch = useCallback(
@@ -81,7 +128,7 @@ export const App: React.FC = () => {
    * search immediately so the new mode is visible straight away.
    */
   const handleModeChange = useCallback(
-    (next: SearchMode) => {
+    (next: AppSearchMode) => {
       setMode(next);
       const active = activeQuery.trim();
       if (view === 'landing' || !active) {
@@ -99,6 +146,7 @@ export const App: React.FC = () => {
     setActiveQuery('');
     setResults(null);
     setError(null);
+    setErrorCode(null);
     setView('landing');
     // Home keeps the selected mode in the URL so the landing page remembers it.
     window.history.pushState({}, '', buildSearchPath({ query: '', mode }));
@@ -133,7 +181,34 @@ export const App: React.FC = () => {
   }, [runSearch]);
 
   // Narrow to the Phase 9 envelope when the backend reported a specialized mode.
-  const modeResponse = results ? asModeResponse(results) : null;
+  const localResults = results && 'hits' in results ? results : null;
+  const liveResults = results && 'results' in results ? results : null;
+  const modeResponse = localResults ? asModeResponse(localResults) : null;
+  const liveErrorTitle: Record<string, string> = {
+    invalid_query: 'Invalid live-search query',
+    tavily_not_configured: 'Live Internet Search is not configured',
+    tavily_authentication_error: 'Tavily authentication failed',
+    tavily_rate_limited: 'Tavily rate limit exceeded',
+    tavily_credits_exhausted: 'Tavily free credits are exhausted',
+    seek_monthly_budget_exhausted: 'SEEK monthly live-search budget reached',
+    tavily_timeout: 'Tavily search timed out',
+    tavily_network_error: 'Could not connect to Tavily',
+    tavily_unavailable: 'Live Internet Search is unavailable',
+    provider_unavailable: 'Live Internet Search is unavailable',
+    usage_store_unavailable: 'Live Internet Search is temporarily unavailable',
+    backend_unavailable: 'Unable to reach the SEEK backend',
+  };
+  const liveControls = mode === 'live' && (
+    <>
+      <LiveSearchFilters
+        includeDomains={includeDomains}
+        excludeDomains={excludeDomains}
+        onIncludeDomainsChange={setIncludeDomains}
+        onExcludeDomainsChange={setExcludeDomains}
+      />
+      <LiveSearchBudget usage={liveUsage} error={liveUsageError} onRefresh={() => void refreshLiveUsage()} />
+    </>
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-seek-dark text-seek-ink antialiased">
@@ -165,7 +240,9 @@ export const App: React.FC = () => {
               Find the knowledge you need.
             </h1>
             <p className="mt-4 max-w-xl text-base leading-relaxed text-gray-400 sm:text-lg">
-              One thoughtful search across your sources and documents.
+              {mode === 'live'
+                ? 'Search the live public web with Tavily—no crawling or indexing required.'
+                : 'One thoughtful search across your sources and documents.'}
             </p>
 
             <div className="mt-9 flex w-full flex-col items-center gap-5">
@@ -174,9 +251,12 @@ export const App: React.FC = () => {
                 onChange={setQuery}
                 loading={false}
                 autoFocus
+                searchLabel={mode === 'live' ? 'Search the live internet' : undefined}
+                placeholder={mode === 'live' ? 'Search the live internet…' : undefined}
                 onSearch={handleSearch}
               />
               <ModeSelector value={mode} onChange={handleModeChange} />
+              {liveControls}
             </div>
 
             <nav
@@ -184,7 +264,7 @@ export const App: React.FC = () => {
               aria-label="Sample queries"
             >
               <span className="text-sm text-gray-500">Try searching</span>
-              {SAMPLE_QUERIES[mode].map((sample) => (
+              {(SAMPLE_QUERIES[mode] ?? []).map((sample) => (
                 <button
                   key={sample}
                   type="button"
@@ -211,9 +291,12 @@ export const App: React.FC = () => {
                 onChange={setQuery}
                 loading={view === 'loading'}
                 autoFocus={false}
+                searchLabel={mode === 'live' ? 'Search the live internet' : undefined}
+                placeholder={mode === 'live' ? 'Search the live internet…' : undefined}
                 onSearch={handleSearch}
               />
               <ModeSelector value={mode} onChange={handleModeChange} disabled={view === 'loading'} />
+              {liveControls}
             </div>
 
             {view === 'loading' && (
@@ -224,13 +307,18 @@ export const App: React.FC = () => {
               >
                 <Loader2 className="h-6 w-6 animate-spin text-seek-accent" aria-hidden="true" />
                 <p className="text-sm">
-                  Searching &ldquo;{activeQuery}&rdquo; &middot; {modeLabel(mode)}&hellip;
+                  Searching &ldquo;{activeQuery}&rdquo; &middot; {modeLabel(mode)}
+                  {mode === 'live' ? ' through Tavily' : ''}&hellip;
                 </p>
               </div>
             )}
 
-            {view === 'results' && results && (
-              <SearchResults response={results} modeResponse={modeResponse} />
+            {view === 'results' && liveResults && mode === 'live' && (
+              <LiveSearchResults response={liveResults} />
+            )}
+
+            {view === 'results' && localResults && (
+              <SearchResults response={localResults} modeResponse={modeResponse} />
             )}
 
             {view === 'error' && (
@@ -242,14 +330,16 @@ export const App: React.FC = () => {
                   <WifiOff className="h-6 w-6 text-gray-400" aria-hidden="true" />
                 </div>
                 <h2 className="text-lg font-semibold text-seek-ink">
-                  Unable to reach the SEEK search backend
+                  {mode === 'live'
+                    ? liveErrorTitle[errorCode ?? ''] ?? 'Live Internet Search is unavailable'
+                    : 'Unable to reach the SEEK search backend'}
                 </h2>
                 <p className="mt-2 text-sm text-gray-400">{error}</p>
-                <p className="mt-1 text-xs text-gray-400">
+                {mode !== 'live' && <p className="mt-1 text-xs text-gray-400">
                   Make sure the FastAPI backend is running at{' '}
                   <code className="rounded bg-seek-dark px-1.5 py-0.5 font-mono">{apiBaseUrl}</code>{' '}
                   and try again.
-                </p>
+                </p>}
                 <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
                   <button
                     type="button"

@@ -238,7 +238,7 @@ def fake_repository() -> FakeRepository:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_process_singletons():
+def _isolate_process_singletons(monkeypatch, tmp_path):
     """Drop the process-wide managers around every test.
 
     ``backend.search.index_manager``, ``backend.search.semantic`` and
@@ -247,16 +247,27 @@ def _isolate_process_singletons():
     one live engine / job registry). Without this reset a test that installs a
     temporary engine, or registers a crawl job, would leak it into the next one.
 
-    Only the managers are reset - the embedding generator singleton is left alone
-    so a real model loaded by the Phase 6 live tier stays cached.
+    Search/crawl managers and the live-search service are reset. The embedding
+    generator singleton is left alone so a real model loaded by the Phase 6
+    live tier stays cached; the Tavily usage file is redirected to tmp_path.
     """
     reset_index_manager()
     reset_semantic_index_manager()
     _reset_crawl_manager()
+    from backend.config import settings
+    from backend.search.tavily import reset_live_search_service
+
+    reset_live_search_service()
+    monkeypatch.setattr(
+        settings,
+        "TAVILY_USAGE_DB_PATH",
+        str(tmp_path / "tavily_usage.sqlite3"),
+    )
     yield
     reset_index_manager()
     reset_semantic_index_manager()
     _reset_crawl_manager()
+    reset_live_search_service()
 
 
 def _reset_crawl_manager() -> None:

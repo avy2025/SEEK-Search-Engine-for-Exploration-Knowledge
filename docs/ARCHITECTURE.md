@@ -52,6 +52,12 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 ## 3. Layer & Module Breakdown
 
 ### 3.1 Presentation Layer (`frontend/`)
+- **Phase 12 live path**: `Live Internet Search` uses `POST /api/live-search` and
+  the Tavily Search REST API independently of the local retrieval stack. Results
+  are not crawled, persisted as documents, or added to BM25/FAISS. A SQLite
+  ledger under `indexes/` reserves and records SEEK's monthly credits; the
+  Compose `seek_indexes` volume preserves it across restarts. Successful
+  responses are cached in process for the configured TTL.
 - **Framework**: React + TypeScript + Tailwind CSS
 - **Responsibilities**:
   - Render clean search bar with mode selectors (Web, Research, Code, AI).
@@ -96,6 +102,8 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
   - `POST /api/index/semantic/refresh`: Incremental change detection for the FAISS semantic index.
   - `GET /api/index/status`: Persistent-index health and staleness status (BM25 + semantic).
   - `GET /api/search/modes`: Machine-readable catalog of the specialized search modes.
+  - `POST /api/live-search`: Independent live internet search via Tavily (basic only).
+  - `GET /api/live-search/usage`: SEEK-side monthly live-search credit budget and counters.
   - `POST /api/answer`: Generate RAG answer based on retrieved documents.
 
 > **Implemented (Phases 4–6)**: `GET /health`, `GET /` (service meta),
@@ -121,6 +129,15 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 > (`detail.error = "invalid_search_mode"`). Mode execution is delegated to
 > `backend/api/mode_orchestrator.py`, which composes the existing handlers and
 > the Phase 8 RAG pipeline rather than re-implementing retrieval.
+
+> **Implemented (Phase 12)**: the UI's Live Internet Search option calls the
+> dedicated async Tavily API, not `GET /api/search`. It accepts a query and
+> optional validated domain filters, returns original web URLs and snippets,
+> and reports provider errors without local-index fallback. A 900-credit
+> monthly SQLite ledger reserves basic-search credit before a request; it
+> persists on the existing Docker index volume. The account must remain on
+> Tavily's free Researcher plan; SEEK cannot enforce account-wide billing
+> settings or limit other applications using the same key.
 
 ### 3.3 Content & Crawler Pipeline (`backend/crawler/`, `backend/processing/`)
 - **Tools**: `httpx`, `asyncio`, `BeautifulSoup4`, `urllib.robotparser`

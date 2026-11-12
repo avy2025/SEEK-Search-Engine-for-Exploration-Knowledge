@@ -71,6 +71,8 @@ EXPECTED_ROUTES: dict[str, set[str]] = {
     "/health": {"GET"},
     "/api/search": {"GET"},
     "/api/search/modes": {"GET"},
+    "/api/live-search": {"POST"},
+    "/api/live-search/usage": {"GET"},
     "/api/answer": {"POST"},
     "/api/crawl": {"GET", "POST"},
     "/api/crawl/{job_id}": {"GET"},

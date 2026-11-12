@@ -11,11 +11,11 @@
  *   /?mode=ai                  -> mode only (landing page remembers the choice)
  */
 
-import { DEFAULT_SEARCH_MODE, isSearchMode, type SearchMode } from './modes';
+import { DEFAULT_SEARCH_MODE, isSearchMode, type AppSearchMode } from './modes';
 
 export interface SearchState {
   query: string;
-  mode: SearchMode;
+  mode: AppSearchMode;
 }
 
 /** Parse `window.location.search` (or any query string) into a search state. */

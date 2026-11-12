@@ -9,16 +9,21 @@
  *               optional grounded synthesis
  *   code     -> lexical-leaning technical search with documentation priority
  *               and code snippets extracted from indexed documents
+ *   live     -> Tavily search over the live internet (dedicated API route)
  */
 
 export type SearchMode = 'web' | 'ai' | 'research' | 'code';
+export type AppSearchMode = SearchMode | 'live';
 
+/** Modes served by the local search orchestrator and its catalog API. */
 export const SEARCH_MODES: readonly SearchMode[] = ['web', 'ai', 'research', 'code'];
+/** UI modes also include the independent live provider endpoint. */
+export const ALL_SEARCH_MODES: readonly AppSearchMode[] = [...SEARCH_MODES, 'live'];
 
 export const DEFAULT_SEARCH_MODE: SearchMode = 'web';
 
 export interface ModeOption {
-  id: SearchMode;
+  id: AppSearchMode;
   label: string;
   hint: string;
 }
@@ -28,16 +33,17 @@ export const MODE_OPTIONS: readonly ModeOption[] = [
   { id: 'ai', label: 'AI Answers', hint: 'Grounded answer from SEEK sources with citations' },
   { id: 'research', label: 'Research', hint: 'Wider, source-diversified evidence and synthesis' },
   { id: 'code', label: 'Code Docs', hint: 'Technical sources, docs priority and code snippets' },
+  { id: 'live', label: 'Live Internet Search', hint: 'Search current public web results with Tavily' },
 ];
 
-export function isSearchMode(value: string | null | undefined): value is SearchMode {
-  return !!value && (SEARCH_MODES as readonly string[]).includes(value);
+export function isSearchMode(value: string | null | undefined): value is AppSearchMode {
+  return !!value && (ALL_SEARCH_MODES as readonly string[]).includes(value);
 }
 
-export function modeLabel(mode: SearchMode): string {
+export function modeLabel(mode: AppSearchMode): string {
   return MODE_OPTIONS.find((option) => option.id === mode)?.label ?? 'Web Search';
 }
 
-export function modeHint(mode: SearchMode): string {
+export function modeHint(mode: AppSearchMode): string {
   return MODE_OPTIONS.find((option) => option.id === mode)?.hint ?? '';
 }

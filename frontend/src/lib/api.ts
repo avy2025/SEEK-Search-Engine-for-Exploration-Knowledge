@@ -44,6 +44,55 @@ export interface SearchResponse {
   metadata?: Record<string, unknown>;
 }
 
+export interface LiveSearchResult {
+  title: string;
+  url: string;
+  domain: string;
+  snippet: string;
+  score: number | null;
+  favicon: string | null;
+}
+
+export interface LiveSearchUsage {
+  month: string;
+  monthly_allowance: number;
+  credits_consumed: number;
+  credits_remaining: number;
+  successful_searches: number;
+  failed_searches: number;
+  last_successful_search_at: string | null;
+  provider_configured?: boolean;
+}
+
+export interface LiveSearchResponse {
+  mode: 'live';
+  query: string;
+  total: number;
+  results: LiveSearchResult[];
+  took_ms: number;
+  cached: boolean;
+  searched_at: string;
+  usage: LiveSearchUsage;
+  message: string;
+}
+
+export interface LiveSearchOptions {
+  include_domains?: string[];
+  exclude_domains?: string[];
+}
+
+export class LiveSearchError extends Error {
+  readonly code: string;
+  readonly status: number;
+
+  constructor(code: string, message: string, status = 0) {
+    super(message);
+    this.name = 'LiveSearchError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
 export interface ModeSource {
   document_id: string;
   title: string;
@@ -193,6 +242,63 @@ export async function search(
     const res = await probe('', path, { method: 'GET' });
     return (await res.json()) as SearchResponse;
   }
+}
+
+export async function liveSearch(
+  query: string,
+  options: LiveSearchOptions = {},
+): Promise<LiveSearchResponse> {
+  let response: Response;
+  const body = JSON.stringify({
+    query,
+    include_domains: options.include_domains ?? [],
+    exclude_domains: options.exclude_domains ?? [],
+  });
+  const init: RequestInit = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  };
+  try {
+    response = await fetch(`${apiBaseUrl}/api/live-search`, init);
+  } catch {
+    try {
+      response = await fetch('/api/live-search', init);
+    } catch {
+      throw new LiveSearchError(
+        'backend_unavailable',
+        'Could not connect to the SEEK backend.',
+      );
+    }
+  }
+
+  if (!response.ok) {
+    let code = 'tavily_unavailable';
+    let message = `Live search failed with status ${response.status}.`;
+    try {
+      const body = (await response.json()) as {
+        detail?: { code?: unknown; message?: unknown } | string;
+      };
+      if (body.detail && typeof body.detail === 'object') {
+        if (typeof body.detail.code === 'string') code = body.detail.code;
+        if (typeof body.detail.message === 'string') message = body.detail.message;
+      } else if (typeof body.detail === 'string') {
+        message = body.detail;
+      }
+    } catch {
+      // Keep the status-based message if the backend did not return JSON.
+    }
+    if (response.status === 422 && code === 'tavily_unavailable') {
+      code = 'invalid_query';
+      message = 'Check the query and domain filters; queries must be 1–500 characters.';
+    }
+    throw new LiveSearchError(code, message, response.status);
+  }
+  return (await response.json()) as LiveSearchResponse;
+}
+
+export function fetchLiveSearchUsage(): Promise<LiveSearchUsage> {
+  return requestJson<LiveSearchUsage>('/api/live-search/usage');
 }
 
 // --------------------------------------------------------------------------- //

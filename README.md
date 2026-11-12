@@ -13,6 +13,7 @@
 [![Phase 9: Search Modes](https://img.shields.io/badge/Phase%209-Specialized%20Modes-Completed-brightgreen.svg)]()
 [![Phase 10: Test Suite](https://img.shields.io/badge/Phase%2010-Automated%20Testing%20Suite-Completed-brightgreen.svg)]()
 [![Phase 11: Docker Hardening](https://img.shields.io/badge/Phase%2011-Docker%20Hardening-Completed-brightgreen.svg)]()
+[![Phase 12: Live Internet Search](https://img.shields.io/badge/Phase%2012-Tavily%20Live%20Search-Implemented-brightgreen.svg)]()
 [![Stack: FastAPI + React + Docker](https://img.shields.io/badge/Stack-FastAPI%20%7C%20React%20%7C%20Docker-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
@@ -22,14 +23,15 @@
 
 **SEEK** is an open, modular, zero-cost search engine designed to demonstrate the complete lifecycle of information retrieval—from domain-controlled web crawling and HTML parsing to lexical (BM25) and semantic (FAISS) vector retrieval, hybrid candidate ranking, and source-grounded RAG answer generation.
 
-Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing API), SEEK owns its core indexing pipeline and search algorithms. It operates under a strict **zero-cost constraint**, requiring no paid APIs or external dependencies.
+Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing API), SEEK owns its core indexing pipeline and search algorithms. Its local search requires no paid APIs; optional live search uses Tavily's free plan with an application-side monthly budget.
 
 ---
 
 ## 🚦 Current Project Status
 
 - **Phases 1–11**: **COMPLETED** — Foundation · Search MVP · Search UI · Controlled Crawler · Persistent Indexing · Semantic Search · Hybrid Ranking · RAG Answers · Specialized Modes · Automated Tests · Docker Hardening.
-- **Remaining roadmap**: Cloud deployment preparation, expanded search evaluation and performance benchmarks, and final documentation polish (Phases 12–14).
+- **Phase 12**: Tavily live internet search is implemented as an optional independent provider; local BM25, FAISS, hybrid retrieval, crawling, PostgreSQL and RAG remain available.
+- **Remaining roadmap**: Expanded search evaluation and performance benchmarks, and final documentation polish (Phases 13–14).
 - **Operations UI**: The frontend includes a **Manage sources & indexing** panel for submitting crawl jobs, monitoring job counts, viewing index status, and refreshing or rebuilding the lexical index. Crawl-job history is in memory and does not survive backend restarts.
 - **Continuous integration**: GitHub Actions runs the backend suite, acceptance probe, frontend tests, typecheck, and production build on pushes and pull requests.
 - **Search evaluation**: Run `python scripts/evaluate_search.py` for an offline BM25 baseline against hand-judged queries in `tests/data/search_relevance.json`. The small sample set is a regression aid, not a representative industry benchmark.
@@ -489,6 +491,70 @@ cd frontend && npm run test:frontend && npm run typecheck && npm run build
 
 ---
 
+## 🌐 PHASE 12: LIVE INTERNET SEARCH (TAVILY)
+
+The **Live Internet Search** mode calls Tavily directly through a dedicated
+backend route. It returns public web search results without crawling or
+indexing them. Existing local modes and the crawler are unchanged; Tavily
+failures are reported explicitly and never fall back to local search.
+
+- **API**: `POST /api/live-search` accepts a query and optional hostname-only
+  `include_domains` / `exclude_domains` lists. `GET /api/live-search/usage`
+  reports SEEK's monthly budget.
+- **Result details**: Title, original URL, hostname, Tavily snippet, optional
+  relevance score and favicon. Results open the original page.
+- **Conservative credit guard**: basic search only (documented as 1 credit),
+  maximum 5 results, no answer or raw-page content, 900 application credits
+  per UTC month, and no retry or paid-provider fallback. Atomic SQLite
+  reservations prevent concurrent requests from exceeding that SEEK budget.
+  The ledger persists in `indexes/tavily_usage.sqlite3` (the Compose
+  `seek_indexes` volume).
+- **Cache**: successful identical query/filter combinations are cached for
+  10 minutes by default and visibly labelled with the original search time.
+  Cache hits do not consume Tavily credits.
+- **Account-side limit**: the SEEK budget applies only to SEEK's use of the
+  key. Tavily account-wide billing settings are external; stay on the
+  Researcher free plan, do not add a payment method or enable paid usage, and
+  set any provider-side usage cap offered in the dashboard. Never rely on
+  SEEK's 900-credit counter to limit other applications using that key.
+
+### Configure Tavily for local or Docker use
+
+1. Create a key at [Tavily](https://app.tavily.com/) while selecting the free
+   Researcher plan. Tavily's published pricing currently advertises 1,000
+   monthly credits without requiring a credit card; plan terms can change.
+   See the [Search API reference](https://docs.tavily.com/documentation/api-reference/endpoint/search)
+   and [current pricing](https://www.tavily.com/pricing).
+2. Put the key only in the backend environment: set `TAVILY_API_KEY` in `.env`
+   (copied from `.env.example`) or export it for a local backend. Do not put it
+   in `VITE_*` variables or frontend code.
+3. Keep the free account's usage/billing settings free-only. Do not upgrade,
+   enable pay-as-you-go, or attach a payment method. If Tavily offers a
+   provider-side monthly limit, configure it at or below the free allowance.
+4. Start SEEK as usual. With no key, local search still works and Live Internet
+   Search clearly reports that Tavily is not configured.
+
+Example:
+
+```bash
+# Start the Docker stack after putting TAVILY_API_KEY in .env
+docker compose up --build -d
+
+# Test live search (the key is read from the backend environment)
+curl -s -X POST http://localhost:8000/api/live-search \
+  -H 'content-type: application/json' \
+  -d '{"query":"FastAPI documentation","include_domains":["fastapi.tiangolo.com"]}'
+
+# Read SEEK's application-side remaining credits
+curl -s http://localhost:8000/api/live-search/usage
+```
+
+The interactive API contracts are published at `/docs` and `/redoc`. Errors
+distinguish invalid input, missing/invalid credentials, rate limiting, account
+credit exhaustion, timeout, and provider/network unavailability.
+
+---
+
 ## ✅ IMPLEMENTED, ADDED, AND STILL TO DO
 
 ### Implemented
@@ -509,7 +575,6 @@ cd frontend && npm run test:frontend && npm run typecheck && npm run build
 
 ### Remaining roadmap work
 
-- **Phase 12 — Cloud deployment preparation (optional)**: document a chosen deployment target, configure production environment variables and CORS, and describe secrets, backups, and deployment operations.
 - **Phase 13 — Evaluation and benchmarking**: expand and review relevance judgments; compare lexical, semantic, hybrid, and specialized modes; measure latency and memory at representative corpus sizes.
 - **Phase 14 — Documentation and final polish**: complete setup/deployment guidance and publish endpoint/architecture documentation.
 - **Operational durability**: persist crawl-job state and support job recovery after backend restarts. Crawl jobs are currently process-local; this is not yet implemented.
@@ -680,8 +745,8 @@ npm run build
 ```
 
 The frontend suites use Node's built-in `node:test` runner — no extra test
-framework is required. `npm run test:frontend` runs both `test:urlstate` and
-`test:modes`; the same scripts are invoked from `tests/test_regression_phase10.py`
+framework is required. `npm run test:frontend` runs `test:urlstate`,
+`test:modes`, and `test:live-search`; the same scripts are invoked from `tests/test_regression_phase10.py`
 so `python -m pytest -q` covers the frontend too.
 
 ---
@@ -815,8 +880,8 @@ To verify that the Phase 1 backend service and health checks are functioning cor
 
 ## 🔮 Next Planned Phase
 
-**Phase 12: Cloud Deployment Preparation (optional)** — deployment guidance,
-production environment configuration, and CORS/secret-handling recommendations.
+**Phase 13: Evaluation and Benchmarking** — expand search relevance judgments
+and measure latency, memory, and quality across representative datasets.
 
 ---
 

@@ -36,6 +36,12 @@ services:
       - APP_NAME=${APP_NAME:-SEEK Search Engine}
       - APP_ENV=${APP_ENV:-development}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      # Optional backend-only credential; never passed to the frontend image.
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - TAVILY_CONNECT_TIMEOUT_SECONDS=${TAVILY_CONNECT_TIMEOUT_SECONDS:-3}
+      - TAVILY_READ_TIMEOUT_SECONDS=${TAVILY_READ_TIMEOUT_SECONDS:-15}
+      - TAVILY_CACHE_TTL_SECONDS=${TAVILY_CACHE_TTL_SECONDS:-600}
+      - TAVILY_USAGE_DB_PATH=/app/indexes/tavily_usage.sqlite3
       # Local embedding-model cache (Phase 6); the all-MiniLM-L6-v2 download is
       # persisted here so container rebuilds do not re-download it.
       - HF_HOME=/app/.huggingface

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test:urlstate": "node --no-warnings --experimental-strip-types tests/urlState.test.mjs",
     "test:modes": "node --no-warnings --experimental-strip-types tests/modes.test.mjs",
-    "test:frontend": "npm run --silent test:urlstate && npm run --silent test:modes"
+    "test:live-search": "node --no-warnings --experimental-strip-types tests/liveSearch.test.mjs",
+    "test:frontend": "npm run --silent test:urlstate && npm run --silent test:modes && npm run --silent test:live-search"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
