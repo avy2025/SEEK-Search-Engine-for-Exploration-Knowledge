@@ -7,15 +7,21 @@ import SearchResults from './components/SearchResults';
 import AdminPanel from './components/AdminPanel';
 import LiveSearchFilters from './components/LiveSearchFilters';
 import LiveSearchResults, { LiveSearchBudget } from './components/LiveSearchResults';
+import AIAnswerPanel from './components/AIAnswerPanel';
 import type { BackendStatus } from './components/HealthBadge';
 import {
+  aiAnswer,
   apiBaseUrl,
   asModeResponse,
+  AIAnswerError,
+  fetchAIAnswerUsage,
   fetchHealth,
   fetchLiveSearchUsage,
   liveSearch,
   LiveSearchError,
   search,
+  type AIAnswerResponse,
+  type AIAnswerUsage,
   type LiveSearchResponse,
   type SearchResponse,
 } from './lib/api';
@@ -42,13 +48,15 @@ export const App: React.FC = () => {
   const [mode, setMode] = useState<AppSearchMode>(initial.current.mode);
   const [activeQuery, setActiveQuery] = useState(initial.current.query);
   const [view, setView] = useState<View>(initial.current.query ? 'loading' : 'landing');
-  const [results, setResults] = useState<SearchResponse | LiveSearchResponse | null>(null);
+  const [results, setResults] = useState<SearchResponse | LiveSearchResponse | AIAnswerResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [includeDomains, setIncludeDomains] = useState('');
   const [excludeDomains, setExcludeDomains] = useState('');
   const [liveUsage, setLiveUsage] = useState<Awaited<ReturnType<typeof fetchLiveSearchUsage>> | null>(null);
   const [liveUsageError, setLiveUsageError] = useState<string | null>(null);
+  const [aiUsage, setAIUsage] = useState<AIAnswerUsage | null>(null);
+  const [aiUsageError, setAIUsageError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking');
   const [adminOpen, setAdminOpen] = useState(false);
 
@@ -60,6 +68,16 @@ export const App: React.FC = () => {
     } catch {
       setLiveUsage(null);
       setLiveUsageError('SEEK live-search budget status is temporarily unavailable.');
+    }
+  }, []);
+
+  const refreshAIUsage = useCallback(async () => {
+    try {
+      setAIUsage(await fetchAIAnswerUsage());
+      setAIUsageError(null);
+    } catch {
+      setAIUsage(null);
+      setAIUsageError("SEEK AI-answer usage status is temporarily unavailable.");
     }
   }, []);
 
@@ -83,6 +101,10 @@ export const App: React.FC = () => {
     if (mode === 'live') void refreshLiveUsage();
   }, [mode, refreshLiveUsage]);
 
+  useEffect(() => {
+    if (mode === 'ai') void refreshAIUsage();
+  }, [mode, refreshAIUsage]);
+
   const runSearch = useCallback(async (q: string, searchMode: AppSearchMode) => {
     setActiveQuery(q);
     setView('loading');
@@ -99,6 +121,11 @@ export const App: React.FC = () => {
         setResults(response);
         setLiveUsage(response.usage);
         setLiveUsageError(null);
+      } else if (searchMode === 'ai') {
+        const response = await aiAnswer(q);
+        setResults(response);
+        setAIUsage(response.usage);
+        setAIUsageError(null);
       } else {
         setResults(await search(q, { mode: searchMode }));
       }
@@ -106,10 +133,12 @@ export const App: React.FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The search request failed.');
       setErrorCode(err instanceof LiveSearchError ? err.code : null);
+      if (err instanceof AIAnswerError) setErrorCode(err.code);
       setView('error');
       if (searchMode === 'live') void refreshLiveUsage();
+      if (searchMode === 'ai') void refreshAIUsage();
     }
-  }, [excludeDomains, includeDomains, refreshLiveUsage]);
+  }, [excludeDomains, includeDomains, refreshAIUsage, refreshLiveUsage]);
 
   /** Submit a query in the currently selected mode and record it in history. */
   const handleSearch = useCallback(
@@ -183,6 +212,7 @@ export const App: React.FC = () => {
   // Narrow to the Phase 9 envelope when the backend reported a specialized mode.
   const localResults = results && 'hits' in results ? results : null;
   const liveResults = results && 'results' in results ? results : null;
+  const aiResults = results && 'provider' in results ? results : null;
   const modeResponse = localResults ? asModeResponse(localResults) : null;
   const liveErrorTitle: Record<string, string> = {
     invalid_query: 'Invalid live-search query',
@@ -198,6 +228,33 @@ export const App: React.FC = () => {
     usage_store_unavailable: 'Live Internet Search is temporarily unavailable',
     backend_unavailable: 'Unable to reach the SEEK backend',
   };
+  const aiErrorTitle: Record<string, string> = {
+    invalid_query: 'Invalid question',
+    gemini_not_configured: 'Gemini is not configured',
+    tavily_not_configured: 'Tavily is not configured',
+    gemini_model_not_free: 'The configured Gemini model is not approved for free use',
+    gemini_model_unavailable: 'The Gemini model is unavailable for this API key',
+    gemini_authentication_error: 'Gemini authentication failed',
+    gemini_quota_exhausted: 'Gemini free quota is exhausted',
+    gemini_rate_limited: 'Gemini rate limit reached',
+    gemini_timeout: 'Gemini answer generation timed out',
+    gemini_network_error: 'Could not connect to Gemini',
+    gemini_unavailable: 'Gemini is temporarily unavailable',
+    gemini_empty_response: 'Gemini returned an empty answer',
+    gemini_missing_citations: 'The answer could not be verified with citations',
+    gemini_invalid_citations: 'The answer contained no valid source citations',
+    tavily_authentication_error: 'Tavily authentication failed',
+    tavily_rate_limited: 'Tavily rate limit exceeded',
+    tavily_credits_exhausted: 'Tavily free credits are exhausted',
+    tavily_timeout: 'Tavily research timed out',
+    tavily_network_error: 'Could not connect to Tavily',
+    tavily_unavailable: 'Live research is unavailable',
+    seek_daily_ai_limit: 'SEEK daily AI-answer limit reached',
+    seek_monthly_budget_exhausted: 'SEEK monthly live-search budget reached',
+    research_no_results: 'No usable web research found',
+    backend_unavailable: 'Unable to reach the SEEK backend',
+    ai_usage_store_unavailable: 'AI Answers is temporarily unavailable',
+  };
   const liveControls = mode === 'live' && (
     <>
       <LiveSearchFilters
@@ -208,6 +265,20 @@ export const App: React.FC = () => {
       />
       <LiveSearchBudget usage={liveUsage} error={liveUsageError} onRefresh={() => void refreshLiveUsage()} />
     </>
+  );
+  const aiControls = mode === 'ai' && (
+    <div className="w-full max-w-3xl rounded-lg border border-seek-border bg-white px-4 py-3 text-left text-xs text-gray-400">
+      {aiUsage ? (
+        <span>
+          {aiUsage.requests_remaining} of {aiUsage.daily_limit} SEEK AI requests left today
+          {!aiUsage.gemini_configured && ' · Gemini API key not configured'}
+          {!aiUsage.tavily_configured && ' · Tavily API key not configured'}
+          {aiUsage.quota_exhausted && ' · Gemini free quota exhausted until tomorrow'}
+        </span>
+      ) : (
+        <span>{aiUsageError ?? 'AI Answers researches the live web and cites its sources.'}</span>
+      )}
+    </div>
   );
 
   return (
@@ -242,7 +313,9 @@ export const App: React.FC = () => {
             <p className="mt-4 max-w-xl text-base leading-relaxed text-gray-400 sm:text-lg">
               {mode === 'live'
                 ? 'Search the live public web with Tavily—no crawling or indexing required.'
-                : 'One thoughtful search across your sources and documents.'}
+                : mode === 'ai'
+                  ? 'Ask a question. Tavily researches the live web; Gemini synthesizes a cited answer.'
+                  : 'One thoughtful search across your sources and documents.'}
             </p>
 
             <div className="mt-9 flex w-full flex-col items-center gap-5">
@@ -251,12 +324,25 @@ export const App: React.FC = () => {
                 onChange={setQuery}
                 loading={false}
                 autoFocus
-                searchLabel={mode === 'live' ? 'Search the live internet' : undefined}
-                placeholder={mode === 'live' ? 'Search the live internet…' : undefined}
+                searchLabel={
+                  mode === 'live'
+                    ? 'Search the live internet'
+                    : mode === 'ai'
+                      ? 'Ask SEEK AI a question'
+                      : undefined
+                }
+                placeholder={
+                  mode === 'live'
+                    ? 'Search the live internet…'
+                    : mode === 'ai'
+                      ? 'Ask a question for AI Answers…'
+                      : undefined
+                }
                 onSearch={handleSearch}
               />
               <ModeSelector value={mode} onChange={handleModeChange} />
               {liveControls}
+              {aiControls}
             </div>
 
             <nav
@@ -291,12 +377,25 @@ export const App: React.FC = () => {
                 onChange={setQuery}
                 loading={view === 'loading'}
                 autoFocus={false}
-                searchLabel={mode === 'live' ? 'Search the live internet' : undefined}
-                placeholder={mode === 'live' ? 'Search the live internet…' : undefined}
+                searchLabel={
+                  mode === 'live'
+                    ? 'Search the live internet'
+                    : mode === 'ai'
+                      ? 'Ask SEEK AI a question'
+                      : undefined
+                }
+                placeholder={
+                  mode === 'live'
+                    ? 'Search the live internet…'
+                    : mode === 'ai'
+                      ? 'Ask a question for AI Answers…'
+                      : undefined
+                }
                 onSearch={handleSearch}
               />
               <ModeSelector value={mode} onChange={handleModeChange} disabled={view === 'loading'} />
               {liveControls}
+              {aiControls}
             </div>
 
             {view === 'loading' && (
@@ -308,13 +407,22 @@ export const App: React.FC = () => {
                 <Loader2 className="h-6 w-6 animate-spin text-seek-accent" aria-hidden="true" />
                 <p className="text-sm">
                   Searching &ldquo;{activeQuery}&rdquo; &middot; {modeLabel(mode)}
-                  {mode === 'live' ? ' through Tavily' : ''}&hellip;
+                  {mode === 'live'
+                    ? ' through Tavily'
+                    : mode === 'ai'
+                      ? ' with Tavily research and Gemini synthesis'
+                      : ''}
+                  &hellip;
                 </p>
               </div>
             )}
 
             {view === 'results' && liveResults && mode === 'live' && (
               <LiveSearchResults response={liveResults} />
+            )}
+
+            {view === 'results' && aiResults && mode === 'ai' && (
+              <AIAnswerPanel response={aiResults} />
             )}
 
             {view === 'results' && localResults && (
@@ -330,11 +438,18 @@ export const App: React.FC = () => {
                   <WifiOff className="h-6 w-6 text-gray-400" aria-hidden="true" />
                 </div>
                 <h2 className="text-lg font-semibold text-seek-ink">
-                  {mode === 'live'
-                    ? liveErrorTitle[errorCode ?? ''] ?? 'Live Internet Search is unavailable'
-                    : 'Unable to reach the SEEK search backend'}
+                  {mode === 'ai'
+                    ? aiErrorTitle[errorCode ?? ''] ?? 'AI Answers is unavailable'
+                    : mode === 'live'
+                      ? liveErrorTitle[errorCode ?? ''] ?? 'Live Internet Search is unavailable'
+                      : 'Unable to reach the SEEK search backend'}
                 </h2>
                 <p className="mt-2 text-sm text-gray-400">{error}</p>
+                {mode === 'ai' && (
+                  <p className="mt-2 text-xs text-gray-400">
+                    No answer was generated without successful web research and valid citations.
+                  </p>
+                )}
                 {mode !== 'live' && <p className="mt-1 text-xs text-gray-400">
                   Make sure the FastAPI backend is running at{' '}
                   <code className="rounded bg-seek-dark px-1.5 py-0.5 font-mono">{apiBaseUrl}</code>{' '}
@@ -357,6 +472,15 @@ export const App: React.FC = () => {
                     <Home className="h-4 w-4" aria-hidden="true" />
                     Go home
                   </button>
+                  {mode === 'ai' && (
+                    <button
+                      type="button"
+                      onClick={() => handleModeChange('live')}
+                      className="inline-flex items-center gap-2 rounded-lg border border-seek-border bg-white px-4 py-2 text-sm font-medium text-seek-accent transition hover:text-seek-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
+                    >
+                      Try Live Internet Search
+                    </button>
+                  )}
                 </div>
               </div>
             )}

@@ -76,6 +76,40 @@ export interface LiveSearchResponse {
   message: string;
 }
 
+export interface AIAnswerSource {
+  id: number;
+  title: string;
+  url: string;
+  domain: string;
+  content: string;
+}
+
+export interface AIAnswerUsage {
+  day: string;
+  daily_limit: number;
+  requests_used: number;
+  requests_remaining: number;
+  failed_requests: number;
+  quota_exhausted: boolean;
+  last_successful_request_at: string | null;
+  gemini_configured?: boolean;
+  tavily_configured?: boolean;
+}
+
+export interface AIAnswerResponse {
+  mode: 'ai';
+  query: string;
+  answer: string;
+  sources: AIAnswerSource[];
+  model: string;
+  provider: 'gemini';
+  cached: boolean;
+  searched_at: string;
+  took_ms: number;
+  usage: AIAnswerUsage;
+  message: string;
+}
+
 export interface LiveSearchOptions {
   include_domains?: string[];
   exclude_domains?: string[];
@@ -88,6 +122,18 @@ export class LiveSearchError extends Error {
   constructor(code: string, message: string, status = 0) {
     super(message);
     this.name = 'LiveSearchError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export class AIAnswerError extends Error {
+  readonly code: string;
+  readonly status: number;
+
+  constructor(code: string, message: string, status = 0) {
+    super(message);
+    this.name = 'AIAnswerError';
     this.code = code;
     this.status = status;
   }
@@ -299,6 +345,52 @@ export async function liveSearch(
 
 export function fetchLiveSearchUsage(): Promise<LiveSearchUsage> {
   return requestJson<LiveSearchUsage>('/api/live-search/usage');
+}
+
+export async function aiAnswer(query: string): Promise<AIAnswerResponse> {
+  const init: RequestInit = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  };
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/api/ai-answer`, init);
+  } catch {
+    try {
+      response = await fetch('/api/ai-answer', init);
+    } catch {
+      throw new AIAnswerError('backend_unavailable', 'Could not connect to the SEEK backend.');
+    }
+  }
+
+  if (!response.ok) {
+    let code = 'gemini_unavailable';
+    let message = `AI Answers failed with status ${response.status}.`;
+    try {
+      const body = (await response.json()) as {
+        detail?: { code?: unknown; message?: unknown } | string;
+      };
+      if (body.detail && typeof body.detail === 'object') {
+        if (typeof body.detail.code === 'string') code = body.detail.code;
+        if (typeof body.detail.message === 'string') message = body.detail.message;
+      } else if (typeof body.detail === 'string') {
+        message = body.detail;
+      }
+    } catch {
+      // Keep the status-based message if the backend did not return JSON.
+    }
+    if (response.status === 422 && code === 'gemini_unavailable') {
+      code = 'invalid_query';
+      message = 'Enter a question between 1 and 500 characters.';
+    }
+    throw new AIAnswerError(code, message, response.status);
+  }
+  return (await response.json()) as AIAnswerResponse;
+}
+
+export function fetchAIAnswerUsage(): Promise<AIAnswerUsage> {
+  return requestJson<AIAnswerUsage>('/api/ai-answer/usage');
 }
 
 // --------------------------------------------------------------------------- //

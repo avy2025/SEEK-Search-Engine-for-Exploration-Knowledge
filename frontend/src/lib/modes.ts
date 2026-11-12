@@ -30,7 +30,7 @@ export interface ModeOption {
 
 export const MODE_OPTIONS: readonly ModeOption[] = [
   { id: 'web', label: 'Web Search', hint: 'Hybrid ranked results across every SEEK source' },
-  { id: 'ai', label: 'AI Answers', hint: 'Grounded answer from SEEK sources with citations' },
+  { id: 'ai', label: 'AI Answers', hint: 'Tavily web research and a cited Gemini answer' },
   { id: 'research', label: 'Research', hint: 'Wider, source-diversified evidence and synthesis' },
   { id: 'code', label: 'Code Docs', hint: 'Technical sources, docs priority and code snippets' },
   { id: 'live', label: 'Live Internet Search', hint: 'Search current public web results with Tavily' },
