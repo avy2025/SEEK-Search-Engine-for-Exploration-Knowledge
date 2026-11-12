@@ -204,8 +204,9 @@ _STATIC_SPECS: dict[SearchMode, dict[str, Any]] = {
     SearchMode.AI: {
         "label": "AI Answers",
         "description": (
-            "Answer the question with the Phase 8 RAG pipeline using SEEK's "
-            "retrieved sources, returning citations plus the supporting hits."
+            "The local search API retains its Phase 8 indexed-source RAG "
+            "behavior. The React AI Answers mode uses POST /api/ai-answer for "
+            "Tavily research and Gemini synthesis."
         ),
         "retrieval": "hybrid",
         "rag_enabled": True,
