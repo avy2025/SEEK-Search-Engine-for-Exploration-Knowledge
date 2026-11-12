@@ -256,18 +256,26 @@ def _isolate_process_singletons(monkeypatch, tmp_path):
     _reset_crawl_manager()
     from backend.config import settings
     from backend.search.tavily import reset_live_search_service
+    from backend.ai.live_answer import reset_ai_answer_service
 
     reset_live_search_service()
+    reset_ai_answer_service()
     monkeypatch.setattr(
         settings,
         "TAVILY_USAGE_DB_PATH",
         str(tmp_path / "tavily_usage.sqlite3"),
+    )
+    monkeypatch.setattr(
+        settings,
+        "GEMINI_USAGE_DB_PATH",
+        str(tmp_path / "gemini_usage.sqlite3"),
     )
     yield
     reset_index_manager()
     reset_semantic_index_manager()
     _reset_crawl_manager()
     reset_live_search_service()
+    reset_ai_answer_service()
 
 
 def _reset_crawl_manager() -> None:
