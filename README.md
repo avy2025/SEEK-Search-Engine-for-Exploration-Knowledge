@@ -14,6 +14,7 @@
 [![Phase 10: Test Suite](https://img.shields.io/badge/Phase%2010-Automated%20Testing%20Suite-Completed-brightgreen.svg)]()
 [![Phase 11: Docker Hardening](https://img.shields.io/badge/Phase%2011-Docker%20Hardening-Completed-brightgreen.svg)]()
 [![Phase 12: Live Internet Search](https://img.shields.io/badge/Phase%2012-Tavily%20Live%20Search-Implemented-brightgreen.svg)]()
+[![Phase 13: Grounded AI Answers](https://img.shields.io/badge/Phase%2013-Tavily%20%2B%20Gemini-Implemented-brightgreen.svg)]()
 [![Stack: FastAPI + React + Docker](https://img.shields.io/badge/Stack-FastAPI%20%7C%20React%20%7C%20Docker-blue.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)]()
 
@@ -29,9 +30,10 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## 🚦 Current Project Status
 
-- **Phases 1–11**: **COMPLETED** — Foundation · Search MVP · Search UI · Controlled Crawler · Persistent Indexing · Semantic Search · Hybrid Ranking · RAG Answers · Specialized Modes · Automated Tests · Docker Hardening.
+- **Phases 1–13**: **IMPLEMENTED** — Foundation · Search MVP · Search UI · Controlled Crawler · Persistent Indexing · Semantic Search · Hybrid Ranking · Local RAG · Specialized Modes · Automated Tests · Docker Hardening · Tavily Live Search · Tavily + Gemini AI Answers.
 - **Phase 12**: Tavily live internet search is implemented as an optional independent provider; local BM25, FAISS, hybrid retrieval, crawling, PostgreSQL and RAG remain available.
-- **Remaining roadmap**: Expanded search evaluation and performance benchmarks, and final documentation polish (Phases 13–14).
+- **Phase 13**: The AI Answers UI now researches with Tavily Basic Search and generates citation-validated responses with Gemini's verified free-tier model. Existing indexed RAG APIs remain available.
+- **Remaining roadmap**: Expanded search evaluation and final documentation polish (Phase 14).
 - **Operations UI**: The frontend includes a **Manage sources & indexing** panel for submitting crawl jobs, monitoring job counts, viewing index status, and refreshing or rebuilding the lexical index. Crawl-job history is in memory and does not survive backend restarts.
 - **Continuous integration**: GitHub Actions runs the backend suite, acceptance probe, frontend tests, typecheck, and production build on pushes and pull requests.
 - **Search evaluation**: Run `python scripts/evaluate_search.py` for an offline BM25 baseline against hand-judged queries in `tests/data/search_relevance.json`. The small sample set is a regression aid, not a representative industry benchmark.
@@ -327,11 +329,15 @@ Phase 8 adds source-grounded answer synthesis via `POST /api/answer`:
 
 ## ✅ PHASE 9 COMPLETE FEATURES (Specialized Search Modes)
 
-Phase 9 turns SEEK into four purpose-built search experiences — **Web Search**,
+Phase 9 turns SEEK into four purpose-built local search experiences — **Web Search**,
 **AI Answers**, **Research** and **Code Docs** — as a thin **orchestration
 layer** over the retrieval and RAG services built in Phases 2–8. No BM25,
 semantic, hybrid or RAG logic is duplicated; a mode only chooses which existing
 service to call and how to arrange its output.
+
+Phase 13 upgrades the user-facing AI Answers choice to use live Tavily research
+and Gemini synthesis. The previous indexed-source behavior remains available
+through `GET /api/search?mode=ai` and `POST /api/answer`.
 
 1. **Mode registry** (`backend/search/modes.py`) — a controlled `SearchMode`
    enum plus a `ModeSpec` per mode (retrieval strategy, ranking weights, result
@@ -366,7 +372,7 @@ service to call and how to arrange its output.
 
 5. **Mode behaviour**
    - **`web`** — broad hybrid retrieval, ranked results, no generated answer.
-   - **`ai`** — hybrid retrieval plus a Phase 8 grounded answer with citations.
+   - **`ai`** — hybrid retrieval plus a Phase 8 grounded answer when called through the legacy local search API. The React AI Answers mode uses Phase 13's live research endpoint.
    - **`research`** — wider candidate retrieval
      (`RESEARCH_CANDIDATE_MULTIPLIER`), per-host source diversification,
      richer snippets, and a labelled separation between retrieved evidence
@@ -555,13 +561,65 @@ credit exhaustion, timeout, and provider/network unavailability.
 
 ---
 
+## ✨ PHASE 13: GEMINI-POWERED AI ANSWERS
+
+The **AI Answers** UI mode calls a dedicated backend pipeline: SEEK searches
+Tavily's existing Basic Search provider, validates and deduplicates up to five
+source snippets, then makes one Gemini generation request. Only citations that
+map to supplied Tavily results are retained and displayed as clickable source
+links. If research fails, no answer is generated; if Gemini's quota is
+unavailable, the UI offers Live Internet Search instead.
+
+- **API**: `POST /api/ai-answer` accepts `{ "query": "..." }`. `GET
+  /api/ai-answer/usage` reports SEEK's daily request allowance and provider
+  configuration status. The API key values are never returned.
+- **Free-tier guards**: Up to 30 AI-answer requests/day, five source documents,
+  at most 12,000 characters of research context, one generation call per
+  request, and successful-answer caching for 10 minutes. Daily usage and quota
+  exhaustion persist in `indexes/gemini_usage.sqlite3` on Docker's existing
+  `seek_indexes` volume.
+- **No paid tools or fallback**: Google Search grounding is disabled; only
+  models in SEEK's verified free-tier allowlist are accepted; no other model or
+  provider is used when Gemini fails. Tavily's own monthly budget remains
+  independently enforced.
+- **Current model choice**: Google's current pricing lists
+  `gemini-3.5-flash-lite` as free tier. `gemini-3.8-flash` is listed as not
+  available on the free tier, so SEEK deliberately does not default to or
+  permit it. The model endpoint is checked for generation support before use.
+
+### Configure Gemini without billing
+
+1. Create a key in [Google AI Studio](https://aistudio.google.com/apikey) for a
+   project with **Google Cloud billing disabled** and no paid billing account
+   attached. Google can change model availability and free-tier limits; verify
+   the model in the [official model list](https://ai.google.dev/gemini-api/docs/models)
+   and [pricing page](https://ai.google.dev/gemini-api/docs/pricing) before use.
+2. Set `GEMINI_API_KEY` only in the backend `.env` file. Do not put it in a
+   `VITE_*` variable or frontend source.
+3. Keep `GEMINI_MODEL=gemini-3.5-flash-lite`, or choose another model only after
+   verifying its free-tier eligibility and adding it to the backend's explicit
+   free-model allowlist. Paid models are rejected before any API request.
+4. Configure `GEMINI_DAILY_REQUEST_LIMIT` (maximum 30), `GEMINI_MAX_SOURCES`
+   (maximum 5), `GEMINI_MAX_CONTEXT_CHARS` (maximum 12,000), timeouts, cache
+   TTL, and persistent usage path as needed.
+5. Run the stack as usual. A missing Gemini key disables AI Answers without
+   disabling Live Internet Search or local search.
+
+The app's 30-request cap does not control Google account billing, usage by
+other applications, or future changes to Google's plan terms. The no-charge
+requirement depends on using a Google AI Studio project with billing disabled;
+do not attach a billing account, enable paid services, or use paid-only models.
+Gemini quota errors are reported without retries or silent fallback.
+
+---
+
 ## ✅ IMPLEMENTED, ADDED, AND STILL TO DO
 
 ### Implemented
 
 - **Search and ranking**: BM25 lexical retrieval, local Sentence Transformers embeddings with FAISS, hybrid scoring, and the Web / AI / Research / Code modes.
 - **Crawling and indexing**: Domain-scoped crawler with robots.txt support, URL/content deduplication, PostgreSQL document persistence, persisted BM25/FAISS artifacts, and rebuild/refresh/status operations.
-- **Grounded answers**: Optional RAG answer generation with interchangeable local/free LLM providers and source citations.
+- **Grounded answers**: Local indexed RAG remains available; the AI Answers UI uses Tavily research plus free-tier Gemini and source-validated clickable citations.
 - **Search experience**: Responsive React interface, URL-backed search state, keyboard-accessible mode selection, result/source/answer views, and explicit loading/error/degraded states.
 - **Source and index management**: UI for starting crawls, viewing crawl activity and index status, and refreshing or rebuilding the lexical index.
 - **Testing and delivery**: Offline backend and frontend suites, an acceptance probe, GitHub Actions checks, and an initial hand-judged BM25 relevance evaluation.
@@ -575,8 +633,7 @@ credit exhaustion, timeout, and provider/network unavailability.
 
 ### Remaining roadmap work
 
-- **Phase 13 — Evaluation and benchmarking**: expand and review relevance judgments; compare lexical, semantic, hybrid, and specialized modes; measure latency and memory at representative corpus sizes.
-- **Phase 14 — Documentation and final polish**: complete setup/deployment guidance and publish endpoint/architecture documentation.
+- **Phase 14 — Evaluation and documentation polish**: expand/review relevance judgments; compare lexical, semantic, hybrid and specialized modes; measure latency and memory; complete setup/deployment guidance.
 - **Operational durability**: persist crawl-job state and support job recovery after backend restarts. Crawl jobs are currently process-local; this is not yet implemented.
 
 User accounts, personalization, multi-node sharding, and learning-to-rank are possible future directions, not currently committed roadmap deliverables.
@@ -880,7 +937,7 @@ To verify that the Phase 1 backend service and health checks are functioning cor
 
 ## 🔮 Next Planned Phase
 
-**Phase 13: Evaluation and Benchmarking** — expand search relevance judgments
+**Phase 14: Evaluation and Benchmarking** — expand search relevance judgments
 and measure latency, memory, and quality across representative datasets.
 
 ---

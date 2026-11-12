@@ -58,9 +58,14 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
   ledger under `indexes/` reserves and records SEEK's monthly credits; the
   Compose `seek_indexes` volume preserves it across restarts. Successful
   responses are cached in process for the configured TTL.
+- **Phase 13 AI-answer path**: the AI Answers UI calls `POST /api/ai-answer`,
+  which reuses the Tavily service/cache/credit ledger, passes a bounded set of
+  untrusted source snippets to a backend-only Gemini provider, validates
+  numeric citations against those sources, and tracks a persistent daily
+  request limit. No Google grounding tools or other model fallbacks are used.
 - **Framework**: React + TypeScript + Tailwind CSS
 - **Responsibilities**:
-  - Render clean search bar with mode selectors (Web, Research, Code, AI).
+  - Render clean search bar with mode selectors (Web, AI Answers, Research, Code, Live Internet Search).
   - Present ranked result cards with titles, source URLs, domains, snippets, and scores.
   - Display visually separated AI synthesized answers with clickable source citations.
   - Handle loading skeletons, error states, and pagination.
@@ -104,6 +109,8 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
   - `GET /api/search/modes`: Machine-readable catalog of the specialized search modes.
   - `POST /api/live-search`: Independent live internet search via Tavily (basic only).
   - `GET /api/live-search/usage`: SEEK-side monthly live-search credit budget and counters.
+  - `POST /api/ai-answer`: Tavily-to-Gemini research and citation-validated answer generation.
+  - `GET /api/ai-answer/usage`: SEEK-side daily Gemini request allowance and provider configuration status.
   - `POST /api/answer`: Generate RAG answer based on retrieved documents.
 
 > **Implemented (Phases 4–6)**: `GET /health`, `GET /` (service meta),
@@ -117,7 +124,7 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 > `tests/test_index_persistence_phase5b.py`,
 > `tests/test_semantic_search_phase6.py`, plus the cross-phase Phase 10 suite
 > described in §3.8).
-> `POST /api/answer` (RAG) remains roadmap backlog.
+> `POST /api/answer` (indexed-source RAG) is available as a separate endpoint.
 
 > **Implemented (Phases 7–9)**: `GET /api/search` additionally accepts
 > `mode=hybrid` (Phase 7) and the specialized modes `web|ai|research|code`
@@ -138,6 +145,17 @@ SEEK (Search Engine for Exploration & Knowledge) is designed as a genuine, modul
 > persists on the existing Docker index volume. The account must remain on
 > Tavily's free Researcher plan; SEEK cannot enforce account-wide billing
 > settings or limit other applications using the same key.
+
+> **Implemented (Phase 13)**: the user-facing AI Answers mode runs one Tavily
+> Basic Search and at most one Gemini generation per question, using up to five
+> unique sources and 12,000 context characters. The UI displays only validated,
+> clickable source citations. Successful identical answers are cached in
+> process for 10 minutes; a persistent SQLite ledger caps SEEK at 30 requests
+> per UTC day and blocks further use after Gemini reports exhausted quota.
+> `gemini-3.5-flash-lite` is the current verified free-tier default; the
+> configured model must pass SEEK's free-model allowlist and Google's model
+> capability check. Keep Google Cloud billing disabled; SEEK cannot inspect or
+> enforce account billing settings.
 
 ### 3.3 Content & Crawler Pipeline (`backend/crawler/`, `backend/processing/`)
 - **Tools**: `httpx`, `asyncio`, `BeautifulSoup4`, `urllib.robotparser`

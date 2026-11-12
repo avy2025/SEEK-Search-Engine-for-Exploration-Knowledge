@@ -101,6 +101,12 @@ Phase 12 adds `tests/test_tavily_phase12.py` and
 built-in test runner; they make no real Tavily calls and cannot spend API
 credits. The frontend aggregate also runs `test:live-search`.
 
+Phase 13 adds `tests/test_gemini_phase13.py` and
+`frontend/tests/aiAnswer.test.mjs`. Gemini's model-check and generation calls
+are mocked; no real Gemini or Tavily requests or credits are used. The tests
+cover the Tavily-to-Gemini pipeline, citation validation, daily usage
+concurrency/persistence, error mapping and AI Answers UI/API wiring.
+
 Running from the repository root matters: the test modules import `backend.*`
 directly and `from conftest import ...`, so no packaging step or install is
 required.

@@ -1,7 +1,7 @@
 # SEEK – 14-Phase Implementation Roadmap & TODO Tracker
 
-> **Current Phase**: Phase 12 (Live Internet Search with Tavily) - **IMPLEMENTED**
-> **Next Recommended Phase**: Phase 13 (Evaluation & Benchmarking)
+> **Current Phase**: Phase 13 (Tavily + Gemini AI Answers) - **IMPLEMENTED**
+> **Next Recommended Phase**: Phase 14 (Evaluation & Final Polish)
 
 ---
 
@@ -143,13 +143,21 @@
 
 ---
 
-### [ ] Phase 13: Evaluation & Benchmarking
+### [x] Phase 13: Gemini-Powered AI Answers
+- [x] Reuse the Phase 12 Tavily provider/cache/credit ledger for live web research; do not make a second Tavily client.
+- [x] Add an async Gemini provider with model availability checking, a verified free-tier allowlist, sanitized errors and no retries or paid fallback.
+- [x] Add `POST /api/ai-answer` and `GET /api/ai-answer/usage`; validate citations and fail closed when research or references are missing.
+- [x] Cap daily requests, source count and context size; persist atomic daily usage and cache successful answers.
+- [x] Replace the React AI Answers mode with responsive citation rendering, expandable sources, copy support and a Live Internet Search fallback.
+- [x] Document free-tier configuration, backend-only credentials, API behavior and offline mocked testing.
+- [x] Add mocked Gemini/Tavily coverage for model errors, source sanitation, citations, usage concurrency/persistence and UI wiring.
+
+> **Free-tier boundary**: Google's current pricing lists `gemini-3.5-flash-lite`
+> as free tier and `gemini-3.8-flash` as paid-only. SEEK rejects models outside
+> its current allowlist, but project billing must remain disabled externally.
+
+### [ ] Phase 14: Evaluation & Final Polish
 - [ ] Benchmark query latency and memory consumption across corpus sizes.
 - [x] Add an offline BM25 relevance-evaluation baseline with hand-judged sample queries (`python scripts/evaluate_search.py`).
-- [ ] Expand/review relevance judgments and compare lexical, semantic, hybrid, and specialized modes before ranking changes.
-
----
-
-### [ ] Phase 14: Documentation & Final Polish
-- [ ] Finalize `README.md` setup instructions.
-- [ ] Create system architecture diagrams and API endpoint documentation.
+- [ ] Expand/review relevance judgments and compare lexical, semantic, hybrid, specialized, Tavily and Gemini paths.
+- [ ] Complete deployment guidance and API/architecture documentation review.

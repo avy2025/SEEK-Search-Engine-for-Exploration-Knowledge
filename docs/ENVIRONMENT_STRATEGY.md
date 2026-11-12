@@ -32,6 +32,17 @@ Configuration is loaded through `.env` files using `pydantic-settings` in Python
    - `TAVILY_USAGE_DB_PATH`: SQLite monthly usage ledger (default
      `./indexes/tavily_usage.sqlite3`); Docker stores it on the persistent
      `seek_indexes` volume.
+7. **Optional Gemini AI Answers**:
+   - `GEMINI_API_KEY`: backend-only Google AI Studio key; empty by default.
+   - `GEMINI_MODEL`: model identifier (default `gemini-3.5-flash-lite`); the
+     backend rejects models outside its verified free-tier allowlist.
+   - `GEMINI_CONNECT_TIMEOUT_SECONDS` / `GEMINI_READ_TIMEOUT_SECONDS`: API timeouts.
+   - `GEMINI_DAILY_REQUEST_LIMIT`: maximum 30 requests per UTC day.
+   - `GEMINI_MAX_SOURCES` / `GEMINI_MAX_CONTEXT_CHARS`: caps of 5 sources and
+     12,000 research characters.
+   - `GEMINI_CACHE_TTL_SECONDS`: successful answer cache duration (default 600).
+   - `GEMINI_USAGE_DB_PATH`: persistent SQLite daily usage ledger; Docker stores
+     it on the `seek_indexes` volume.
 
 ### Tavily free-plan safeguards (Phase 12)
 
@@ -55,6 +66,23 @@ Configuration is loaded through `.env` files using `pydantic-settings` in Python
   remaining count to match all account activity; external use is not visible to
   SEEK.
 
+### Gemini free-tier safeguards (Phase 13)
+
+- Current official [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing)
+  lists `gemini-3.5-flash-lite` as free tier and `gemini-3.8-flash` as not
+  available on the free tier. SEEK defaults to the former and rejects any model
+  not explicitly allowlisted in backend code. The provider also verifies that
+  the model supports `generateContent` before its first generation.
+- The AI Answers path has no Google Search grounding, retries, paid model
+  fallback, or alternate provider. SEEK accepts at most 30 requests per day,
+  five sources and 12,000 context characters, and stores daily usage in SQLite.
+- Create the API key in [Google AI Studio](https://aistudio.google.com/apikey)
+  using a project with Cloud billing disabled and no paid billing account.
+  Google quota and billing configuration remain external; the app cannot
+  guarantee account-wide charges will not occur if billing is later enabled.
+- Both keys remain backend-only, are sent in request headers/bodies only as
+  required, and are never placed in Vite build variables or API responses.
+
 ---
 
 ## 3. Zero-Cost Guarantee & Resource Budgeting
@@ -67,6 +95,7 @@ Configuration is loaded through `.env` files using `pydantic-settings` in Python
 | **Semantic Vectors**| `all-MiniLM-L6-v2` + `FAISS` | CPU execution (~300MB RAM for model) |
 | **Frontend UI** | React + Vite + Tailwind CSS | Static asset bundle served via Nginx/Node |
 | **Live search** | Tavily Search REST API (optional, free-plan only) | Basic web search; local 900-credit monthly guard |
+| **AI Answers** | Tavily research + Gemini free-tier API (optional) | 30 requests/day; max 5 sources / 12,000 chars; no paid fallback |
 
 ---
 
@@ -74,5 +103,6 @@ Configuration is loaded through `.env` files using `pydantic-settings` in Python
 
 - **Zero Secret Commits**: No API keys, secret keys, or passwords may be committed into Git repository history. `.env` is listed in `.gitignore`.
 - **Tavily Key**: `TAVILY_API_KEY` is injected into the backend only; never use a frontend `VITE_*` variable or expose credentials in a response/log.
+- **Gemini Key**: `GEMINI_API_KEY` is injected into the backend only. Keep the Google AI Studio project billing disabled; the runtime only allows the currently verified free-tier Gemini model.
 - **Untrusted Input Handling**: All external web page HTML fetched by crawler is treated as untrusted text. Scripts are stripped during DOM parsing.
 - **Controlled Crawler Scope**: Crawler is strictly locked to allowed domains; outbound connections to arbitrary IP ranges or unverified hosts are prohibited.

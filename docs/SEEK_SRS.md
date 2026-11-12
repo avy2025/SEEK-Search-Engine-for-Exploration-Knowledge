@@ -306,8 +306,8 @@ The weights are configurable and will be tuned experimentally using a small rele
 - **Phase 10 – Testing**: Build unit, integration, API, crawler and ranking tests.
 - **Phase 11 – Docker Hardening**: Optimize images, volumes, health checks and configuration.
 - **Phase 12 – Live Internet Search**: Add optional basic-only Tavily search with backend-only credentials, a persistent 900-credit application budget, caching and explicit failure reporting.
-- **Phase 13 – Evaluation**: Measure relevance, latency, crawl throughput and resource usage.
-- **Phase 14 – Documentation**: README, setup guide, architecture, API documentation and demonstration.
+- **Phase 13 – Gemini AI Answers**: Use Tavily research with free-tier Gemini synthesis, validated citations, backend-only credentials and persistent application request limits.
+- **Phase 14 – Evaluation and Documentation**: Measure relevance, latency, crawl throughput and resource usage; finalize setup, architecture and API documentation.
 
 > **Implementation Status (Phases 1–6 complete)**: Phases 0–4 are implemented
 > (Phase 3 complete). Phase 2 shipped the local corpus (`data/sample_corpus/`),
