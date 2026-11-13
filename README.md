@@ -808,6 +808,77 @@ so `python -m pytest -q` covers the frontend too.
 
 ---
 
+## Phase 14 — Integrated Split-Screen Browser
+
+Selecting a web result, Live Internet Search result, AI Answer citation, or
+supporting source opens it in SEEK's right-hand browser panel. Search results
+remain in the left panel, with the selected result highlighted. The panel
+maintains its own back/forward history, refresh and address controls; browser
+navigation does not change the search URL or query. On narrow screens, results
+and the browser are separate views with a visible return-to-results action.
+
+### Rendering and reader architecture
+
+- **Embedded website:** SEEK first loads the selected HTTP(S) URL in a sandboxed
+  iframe. The destination can still refuse framing with
+  `X-Frame-Options` or Content Security Policy. Browsers do not consistently
+  expose that refusal to the embedding page, so SEEK always keeps an explicit
+  **Try Reader Mode** fallback available instead of claiming it can detect
+  every blocked frame.
+- **SEEK Reader:** `POST /api/browser/read` retrieves a public HTML page and
+  returns article metadata plus structured headings, paragraphs, lists, and
+  safe same-site images. It reuses SEEK's title extraction and never returns
+  executable source HTML. Reader Mode is a simplified, non-interactive text
+  view; it is not the original website.
+- **Unavailable pages:** If Reader Mode is blocked, times out, receives an
+  unsupported response, or finds no article text, SEEK explains the limitation
+  and offers the original URL and a way back to results.
+
+### Reader security and limitations
+
+Reader Mode accepts only HTTP(S) on the standard web ports. It rejects
+credentials and local, private, reserved, and link-local destinations; checks
+all DNS answers and connects to the validated IP directly (including again on
+each new connection); and validates every redirect. It does not use environment
+proxies. Requests have strict timeouts, a 1 MB page cap, a smaller robots.txt
+cap, HTML-only content types, no compressed responses, and a five-redirect
+limit. SEEK checks `robots.txt` before retrieving page content. Images are
+restricted to safe raster formats on the same host, scheme, and port and are
+loaded without a referrer.
+
+Reader Mode makes a separate request to the destination website (not to
+Tavily or Gemini), and does not use additional search or AI credits. Some
+websites prohibit automated retrieval, require sign-in, rely on JavaScript, or
+return content that cannot be extracted; those sites may only be available via
+**Open original**. The iframe can run the destination's own scripts in a
+sandboxed origin, but SEEK never removes or works around a site's frame
+restrictions.
+
+### Start locally and verify
+
+Run the backend and frontend in separate terminals:
+
+```bash
+# Terminal 1, from the repository root
+python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+
+# Terminal 2
+cd frontend
+npm run dev -- --host 127.0.0.1 --port 3000
+```
+
+Open [http://localhost:3000](http://localhost:3000). Verify the backend reader
+tests and frontend suites with:
+
+```bash
+python -m pytest -q tests/test_browser_reader_phase14.py
+cd frontend && npm run test:frontend && npm run typecheck && npm run build
+```
+
+The reader tests use mocked responses and do not request external webpages.
+
+---
+
 ## 🧪 Health-Check & Acceptance Verification
 
 To verify that the Phase 1 backend service and health checks are functioning correctly:
