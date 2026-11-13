@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { Check, Clipboard, ExternalLink, Sparkles } from 'lucide-react';
 import type { AIAnswerResponse, AIAnswerSource } from '../lib/api';
+import { createBrowserPage } from '../lib/browserState';
 
 interface AIAnswerPanelProps {
   response: AIAnswerResponse;
+  onOpenSource?: (url: string, title: string, snippet: string) => void;
 }
 
-function renderInline(text: string, sources: Map<number, AIAnswerSource>): React.ReactNode[] {
+function renderInline(
+  text: string,
+  sources: Map<number, AIAnswerSource>,
+  onOpenSource?: (url: string, title: string, snippet: string) => void,
+): React.ReactNode[] {
   const tokenPattern = /(\[(\d+)\])|(\*\*(.+?)\*\*)|(`([^`]+)`)/g;
   const nodes: React.ReactNode[] = [];
   let cursor = 0;
@@ -15,21 +21,31 @@ function renderInline(text: string, sources: Map<number, AIAnswerSource>): React
     if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
     if (match[2]) {
       const source = sources.get(Number(match[2]));
+      const sourcePage = source ? createBrowserPage(source.url, source.title) : null;
       nodes.push(
-        source ? (
+        source && sourcePage && onOpenSource ? (
+          <button
+            key={`citation-${match.index}`}
+            type="button"
+            onClick={() => onOpenSource(sourcePage.url, source.title, source.content)}
+            aria-label={`Open source ${source.id}: ${source.title}`}
+            className="font-medium text-seek-accent underline decoration-seek-accent/40 underline-offset-2 hover:decoration-seek-accent"
+          >
+            {match[1]}
+          </button>
+        ) : source && sourcePage ? (
           <a
             key={`citation-${match.index}`}
-            href={source.url}
+            href={sourcePage.url}
             target="_blank"
             rel="noopener noreferrer"
+            referrerPolicy="no-referrer"
             aria-label={`Source ${source.id}: ${source.title}`}
             className="font-medium text-seek-accent underline decoration-seek-accent/40 underline-offset-2 hover:decoration-seek-accent"
           >
             {match[1]}
           </a>
-        ) : (
-          match[1]
-        ),
+        ) : match[1],
       );
     } else if (match[4]) {
       nodes.push(<strong key={`bold-${match.index}`}>{match[4]}</strong>);
@@ -49,7 +65,15 @@ function renderInline(text: string, sources: Map<number, AIAnswerSource>): React
   return nodes;
 }
 
-function AnswerMarkdown({ answer, sources }: { answer: string; sources: AIAnswerSource[] }) {
+function AnswerMarkdown({
+  answer,
+  sources,
+  onOpenSource,
+}: {
+  answer: string;
+  sources: AIAnswerSource[];
+  onOpenSource?: (url: string, title: string, snippet: string) => void;
+}) {
   const sourceMap = new Map(sources.map((source) => [source.id, source]));
   const lines = answer.split(/\r?\n/);
   const blocks: React.ReactNode[] = [];
@@ -69,7 +93,7 @@ function AnswerMarkdown({ answer, sources }: { answer: string; sources: AIAnswer
           key={`heading-${index}`}
           className="mb-2 mt-5 font-semibold text-seek-ink first:mt-0"
         >
-          {renderInline(heading[2], sourceMap)}
+          {renderInline(heading[2], sourceMap, onOpenSource)}
         </HeadingTag>,
       );
       index += 1;
@@ -95,7 +119,7 @@ function AnswerMarkdown({ answer, sources }: { answer: string; sources: AIAnswer
           }`}
         >
           {items.map((item, itemIndex) => (
-            <li key={`${index}-${itemIndex}`}>{renderInline(item, sourceMap)}</li>
+            <li key={`${index}-${itemIndex}`}>{renderInline(item, sourceMap, onOpenSource)}</li>
           ))}
         </ListTag>,
       );
@@ -117,14 +141,14 @@ function AnswerMarkdown({ answer, sources }: { answer: string; sources: AIAnswer
     }
     blocks.push(
       <p key={`paragraph-${index}`} className="mb-3 text-[15px] leading-relaxed text-gray-200">
-        {renderInline(paragraph.join(' '), sourceMap)}
+        {renderInline(paragraph.join(' '), sourceMap, onOpenSource)}
       </p>,
     );
   }
   return <div>{blocks}</div>;
 }
 
-export const AIAnswerPanel: React.FC<AIAnswerPanelProps> = ({ response }) => {
+export const AIAnswerPanel: React.FC<AIAnswerPanelProps> = ({ response, onOpenSource }) => {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
   const copyAnswer = async () => {
     try {
@@ -181,38 +205,59 @@ export const AIAnswerPanel: React.FC<AIAnswerPanelProps> = ({ response }) => {
       )}
 
       <div className="mt-6">
-        <AnswerMarkdown answer={response.answer} sources={response.sources} />
+        <AnswerMarkdown
+          answer={response.answer}
+          sources={response.sources}
+          onOpenSource={onOpenSource}
+        />
       </div>
 
       <div className="mt-7 border-t border-seek-border pt-5">
         <h3 className="mb-3 text-sm font-semibold text-seek-ink">Sources</h3>
         <ol className="space-y-2">
-          {response.sources.map((source) => (
-            <li key={source.id}>
-              <details className="group rounded-lg border border-seek-border bg-seek-dark/30">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 text-sm font-medium text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent">
-                  <span className="min-w-0">
-                    <span className="mr-2 font-mono text-xs text-seek-accent">[{source.id}]</span>
-                    <span>{source.title}</span>
-                    <span className="ml-2 text-xs font-normal text-gray-500">{source.domain}</span>
-                  </span>
-                  <span className="shrink-0 text-xs text-gray-500 group-open:hidden">Details</span>
-                </summary>
-                <div className="border-t border-seek-border px-3 pb-3 pt-2">
-                  <a
-                    href={source.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 break-all text-xs text-seek-accent underline underline-offset-2"
-                  >
-                    {source.url}
-                    <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
-                  </a>
-                  <p className="mt-2 text-sm leading-relaxed text-gray-400">{source.content}</p>
-                </div>
-              </details>
-            </li>
-          ))}
+          {response.sources.map((source) => {
+            const sourcePage = createBrowserPage(source.url, source.title);
+            return (
+              <li key={source.id}>
+                <details className="group rounded-lg border border-seek-border bg-seek-dark/30">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3 text-sm font-medium text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent">
+                    <span className="min-w-0">
+                      <span className="mr-2 font-mono text-xs text-seek-accent">[{source.id}]</span>
+                      <span>{source.title}</span>
+                      <span className="ml-2 text-xs font-normal text-gray-500">{source.domain}</span>
+                    </span>
+                    <span className="shrink-0 text-xs text-gray-500 group-open:hidden">Details</span>
+                  </summary>
+                  <div className="border-t border-seek-border px-3 pb-3 pt-2">
+                    {sourcePage && onOpenSource ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenSource(sourcePage.url, source.title, source.content)}
+                        className="inline-flex items-center gap-1 break-all text-left text-xs text-seek-accent underline underline-offset-2"
+                      >
+                        {source.url}
+                        <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      </button>
+                    ) : sourcePage ? (
+                      <a
+                        href={sourcePage.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        referrerPolicy="no-referrer"
+                        className="inline-flex items-center gap-1 break-all text-xs text-seek-accent underline underline-offset-2"
+                      >
+                        {source.url}
+                        <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
+                      </a>
+                    ) : (
+                      <span className="break-all text-xs text-gray-500">{source.url}</span>
+                    )}
+                    <p className="mt-2 text-sm leading-relaxed text-gray-400">{source.content}</p>
+                  </div>
+                </details>
+              </li>
+            );
+          })}
         </ol>
       </div>
     </section>

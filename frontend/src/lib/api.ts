@@ -9,6 +9,7 @@
  */
 
 import { DEFAULT_SEARCH_MODE, type SearchMode } from './modes';
+import type { ReaderPage } from './browserState';
 
 export interface HealthStatus {
   status: string;
@@ -391,6 +392,15 @@ export async function aiAnswer(query: string): Promise<AIAnswerResponse> {
 
 export function fetchAIAnswerUsage(): Promise<AIAnswerUsage> {
   return requestJson<AIAnswerUsage>('/api/ai-answer/usage');
+}
+
+export function fetchReaderPage(url: string, signal?: AbortSignal): Promise<ReaderPage> {
+  return requestJson<ReaderPage>('/api/browser/read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+    signal,
+  });
 }
 
 // --------------------------------------------------------------------------- //

@@ -3,11 +3,14 @@ import { ExternalLink, FileCode2 } from 'lucide-react';
 import type { SearchHit } from '../lib/api';
 import { splitSource } from '../lib/api';
 import type { SearchMode } from '../lib/modes';
+import { createBrowserPage } from '../lib/browserState';
 
 interface ResultCardProps {
   hit: SearchHit;
   /** Active specialized mode; `code` renders the extracted code excerpt. */
   mode?: SearchMode;
+  selected?: boolean;
+  onOpenResult?: (url: string, title: string, snippet: string) => void;
 }
 
 /**
@@ -17,26 +20,36 @@ interface ResultCardProps {
  * (`hit.code_snippet`, produced by the Code Docs mode from indexed content) -
  * nothing is ever synthesised client-side.
  */
-export const ResultCard: React.FC<ResultCardProps> = ({ hit, mode }) => {
+export const ResultCard: React.FC<ResultCardProps> = ({
+  hit,
+  mode,
+  selected = false,
+  onOpenResult,
+}) => {
   const { domain, rest, pathOnly } = splitSource(hit.source);
-  const isLink = !pathOnly && Boolean(hit.source);
+  const browserPage = !pathOnly ? createBrowserPage(hit.source, hit.title || hit.document_id, hit.snippet) : null;
+  const isLink = Boolean(browserPage);
   const codeSnippet = hit.code_snippet?.trim() ?? '';
 
-  const title = isLink ? (
-    <a
-      href={hit.source}
-      target="_blank"
-      rel="noreferrer"
-      className="text-lg font-semibold text-seek-accent transition-colors hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent focus:rounded"
+  const title = browserPage ? (
+    <button
+      type="button"
+      onClick={() => onOpenResult?.(browserPage.url, browserPage.title, browserPage.snippet)}
+      aria-pressed={selected}
+      className={`text-left text-lg font-semibold transition-colors hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent focus:rounded ${
+        selected ? 'text-seek-ink underline decoration-seek-accent decoration-2 underline-offset-4' : 'text-seek-accent'
+      }`}
     >
       {hit.title || hit.document_id}
-    </a>
+    </button>
   ) : (
     <span className="text-lg font-semibold text-gray-100">{hit.title || hit.document_id}</span>
   );
 
   return (
-    <article className="rounded-lg border border-seek-border bg-seek-card p-5 transition-colors hover:border-gray-600">
+    <article className={`rounded-lg border bg-seek-card p-5 transition-colors ${
+      selected ? 'border-seek-accent ring-1 ring-seek-accent/30' : 'border-seek-border hover:border-gray-600'
+    }`}>
       <div className="flex items-start justify-between gap-3">
         <h2 className="min-w-0">{title}</h2>
         <span className="shrink-0 font-mono text-xs text-gray-500">

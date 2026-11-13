@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Home, Loader2, RotateCcw, WifiOff } from 'lucide-react';
 import Header from './components/Header';
 import ModeSelector from './components/ModeSelector';
@@ -8,6 +8,8 @@ import AdminPanel from './components/AdminPanel';
 import LiveSearchFilters from './components/LiveSearchFilters';
 import LiveSearchResults, { LiveSearchBudget } from './components/LiveSearchResults';
 import AIAnswerPanel from './components/AIAnswerPanel';
+import BrowserPanel from './components/BrowserPanel';
+import { browserReducer, createBrowserPage, initialBrowserState } from './lib/browserState';
 import type { BackendStatus } from './components/HealthBadge';
 import {
   aiAnswer,
@@ -59,6 +61,8 @@ export const App: React.FC = () => {
   const [aiUsageError, setAIUsageError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking');
   const [adminOpen, setAdminOpen] = useState(false);
+  const [browserState, dispatchBrowser] = useReducer(browserReducer, initialBrowserState);
+  const [mobilePane, setMobilePane] = useState<'results' | 'browser'>('results');
 
   const refreshLiveUsage = useCallback(async () => {
     try {
@@ -106,6 +110,8 @@ export const App: React.FC = () => {
   }, [mode, refreshAIUsage]);
 
   const runSearch = useCallback(async (q: string, searchMode: AppSearchMode) => {
+    dispatchBrowser({ type: 'close' });
+    setMobilePane('results');
     setActiveQuery(q);
     setView('loading');
     setError(null);
@@ -171,6 +177,8 @@ export const App: React.FC = () => {
   );
 
   const goHome = useCallback(() => {
+    dispatchBrowser({ type: 'close' });
+    setMobilePane('results');
     setQuery('');
     setActiveQuery('');
     setResults(null);
@@ -180,6 +188,13 @@ export const App: React.FC = () => {
     // Home keeps the selected mode in the URL so the landing page remembers it.
     window.history.pushState({}, '', buildSearchPath({ query: '', mode }));
   }, [mode]);
+
+  const handleOpenResult = useCallback((url: string, title: string, snippet: string) => {
+    const page = createBrowserPage(url, title, snippet);
+    if (!page) return;
+    dispatchBrowser({ type: 'navigate', page });
+    setMobilePane('browser');
+  }, []);
 
   // Execute a query found in the URL on first render (deep links / refresh).
   useEffect(() => {
@@ -285,7 +300,9 @@ export const App: React.FC = () => {
     <div className="flex min-h-screen flex-col bg-seek-dark text-seek-ink antialiased">
       <Header backendStatus={backendStatus} onHome={goHome} />
 
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-5 py-8 sm:px-8">
+      <main className={`mx-auto flex w-full flex-1 flex-col px-5 py-8 sm:px-8 ${
+        browserState.open ? 'max-w-[100rem]' : 'max-w-5xl'
+      }`}>
         <div className="mb-5 flex justify-end">
           <button
             type="button"
@@ -417,16 +434,46 @@ export const App: React.FC = () => {
               </div>
             )}
 
-            {view === 'results' && liveResults && mode === 'live' && (
-              <LiveSearchResults response={liveResults} />
-            )}
+            {view === 'results' && (
+              <div className={`grid min-w-0 flex-1 items-start gap-5 ${
+                browserState.open ? 'grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]' : 'grid-cols-1'
+              }`}>
+                <div className={`min-w-0 ${browserState.open && mobilePane === 'browser' ? 'hidden md:block' : ''}`}>
+                  {liveResults && mode === 'live' && (
+                    <LiveSearchResults
+                      response={liveResults}
+                      selectedUrl={browserState.history[browserState.index]?.url}
+                      onOpenResult={handleOpenResult}
+                    />
+                  )}
 
-            {view === 'results' && aiResults && mode === 'ai' && (
-              <AIAnswerPanel response={aiResults} />
-            )}
+                  {aiResults && mode === 'ai' && (
+                    <AIAnswerPanel response={aiResults} onOpenSource={handleOpenResult} />
+                  )}
 
-            {view === 'results' && localResults && (
-              <SearchResults response={localResults} modeResponse={modeResponse} />
+                  {localResults && (
+                    <SearchResults
+                      response={localResults}
+                      modeResponse={modeResponse}
+                      selectedUrl={browserState.history[browserState.index]?.url}
+                      onOpenResult={handleOpenResult}
+                    />
+                  )}
+                </div>
+                {browserState.open && (
+                  <div className={`min-w-0 ${mobilePane === 'results' ? 'hidden md:block' : ''}`}>
+                    <BrowserPanel
+                      state={browserState}
+                      dispatch={dispatchBrowser}
+                      onClose={() => {
+                        dispatchBrowser({ type: 'close' });
+                        setMobilePane('results');
+                      }}
+                      onBackToResults={() => setMobilePane('results')}
+                    />
+                  </div>
+                )}
+              </div>
             )}
 
             {view === 'error' && (

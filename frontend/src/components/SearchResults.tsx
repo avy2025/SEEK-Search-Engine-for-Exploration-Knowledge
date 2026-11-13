@@ -6,12 +6,15 @@ import {
   type SearchResponse,
 } from '../lib/api';
 import { modeLabel, type SearchMode } from '../lib/modes';
+import { createBrowserPage } from '../lib/browserState';
 import AnswerPanel from './AnswerPanel';
 import ResultCard from './ResultCard';
 import SourcesPanel from './SourcesPanel';
 
 interface SearchResultsProps {
   response: SearchResponse;
+  selectedUrl?: string | null;
+  onOpenResult?: (url: string, title: string, snippet: string) => void;
   /**
    * Phase 9 specialized-mode envelope. Omitted for the pre-Phase-9 retrieval
    * modes so their original rendering (and payload) stays untouched.
@@ -118,7 +121,12 @@ const EmptyState: React.FC<{ response: SearchResponse; specialized: boolean }> =
 };
 
 /** Ranked result list plus the empty-result state (no meaningless cards). */
-export const SearchResults: React.FC<SearchResultsProps> = ({ response, modeResponse }) => {
+export const SearchResults: React.FC<SearchResultsProps> = ({
+  response,
+  modeResponse,
+  selectedUrl,
+  onOpenResult,
+}) => {
   const mode: SearchMode | null = modeResponse?.mode ?? null;
   const passages = metaValue(modeResponse?.metadata, 'rag.passages');
   const empty = response.hits.length === 0 || !hasRankedHits(response);
@@ -127,7 +135,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ response, modeResp
     <ol className="flex flex-col gap-4">
       {response.hits.map((hit) => (
         <li key={hit.document_id}>
-          <ResultCard hit={hit} mode={mode ?? undefined} />
+          <ResultCard
+            hit={hit}
+            mode={mode ?? undefined}
+            selected={createBrowserPage(hit.source, hit.title || hit.document_id)?.url === selectedUrl}
+            onOpenResult={onOpenResult}
+          />
         </li>
       ))}
     </ol>
@@ -185,7 +198,12 @@ export const SearchResults: React.FC<SearchResultsProps> = ({ response, modeResp
 
       {empty ? <EmptyState response={response} specialized /> : ranked}
 
-      <SourcesPanel mode={modeResponse.mode} sources={modeResponse.sources} />
+      <SourcesPanel
+        mode={modeResponse.mode}
+        sources={modeResponse.sources}
+        selectedUrl={selectedUrl}
+        onOpenResult={onOpenResult}
+      />
     </section>
   );
 };

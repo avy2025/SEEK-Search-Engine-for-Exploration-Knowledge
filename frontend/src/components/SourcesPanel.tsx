@@ -3,12 +3,15 @@ import { ExternalLink, Quote } from 'lucide-react';
 import type { ModeSource } from '../lib/api';
 import { splitSource } from '../lib/api';
 import type { SearchMode } from '../lib/modes';
+import { createBrowserPage } from '../lib/browserState';
 
 interface SourcesPanelProps {
   mode: SearchMode;
   sources: ModeSource[];
   /** Hide the panel entirely when a mode has nothing to cite. */
   collapsible?: boolean;
+  selectedUrl?: string | null;
+  onOpenResult?: (url: string, title: string, snippet: string) => void;
 }
 
 const EMPTY_COPY: Record<SearchMode, string> = {
@@ -25,7 +28,13 @@ const EMPTY_COPY: Record<SearchMode, string> = {
  * produced, otherwise the supporting hits. An empty list renders an explicit
  * note rather than an invented placeholder entry.
  */
-export const SourcesPanel: React.FC<SourcesPanelProps> = ({ mode, sources, collapsible = true }) => {
+export const SourcesPanel: React.FC<SourcesPanelProps> = ({
+  mode,
+  sources,
+  collapsible = true,
+  selectedUrl,
+  onOpenResult,
+}) => {
   if (sources.length === 0) {
     const copy = EMPTY_COPY[mode];
     if (!copy) return null;
@@ -83,7 +92,7 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({ mode, sources, colla
               </span>
             );
 
-            const isLink = !pathOnly && Boolean(source.source);
+            const page = !pathOnly ? createBrowserPage(source.source, source.title || source.document_id) : null;
             return (
               <li
                 key={key}
@@ -98,16 +107,18 @@ export const SourcesPanel: React.FC<SourcesPanelProps> = ({ mode, sources, colla
                   </span>
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex items-center gap-2 text-sm text-gray-200">
-                      {isLink ? (
-                        <a
-                          href={source.source}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex min-w-0 flex-1 items-center gap-1.5 truncate font-medium text-seek-accent transition-colors hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent focus:rounded"
+                      {page ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenResult?.(page.url, page.title, '')}
+                          aria-pressed={selectedUrl === page?.url}
+                          className={`inline-flex min-w-0 flex-1 items-center gap-1.5 truncate text-left font-medium transition-colors hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent focus:rounded ${
+                            selectedUrl === page?.url ? 'text-seek-ink underline decoration-seek-accent decoration-2 underline-offset-4' : 'text-seek-accent'
+                          }`}
                         >
                           {label}
                           <ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
-                        </a>
+                        </button>
                       ) : (
                         <span className="flex min-w-0 flex-1 items-center gap-2">{label}</span>
                       )}
