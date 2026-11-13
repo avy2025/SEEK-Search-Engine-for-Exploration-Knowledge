@@ -39,6 +39,7 @@ EXPECTED_PATHS = {
     "/api/live-search/usage",
     "/api/ai-answer",
     "/api/ai-answer/usage",
+    "/api/browser/read",
     "/api/crawl",
     "/api/crawl/{job_id}",
     "/api/index/status",

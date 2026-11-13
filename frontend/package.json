@@ -12,7 +12,8 @@
     "test:modes": "node --no-warnings --experimental-strip-types tests/modes.test.mjs",
     "test:live-search": "node --no-warnings --experimental-strip-types tests/liveSearch.test.mjs",
     "test:ai-answer": "node --no-warnings --experimental-strip-types tests/aiAnswer.test.mjs",
-    "test:frontend": "npm run --silent test:urlstate && npm run --silent test:modes && npm run --silent test:live-search && npm run --silent test:ai-answer"
+    "test:browser": "node --no-warnings --experimental-strip-types tests/browserState.test.mjs",
+    "test:frontend": "npm run --silent test:urlstate && npm run --silent test:modes && npm run --silent test:live-search && npm run --silent test:ai-answer && npm run --silent test:browser"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",

@@ -65,7 +65,7 @@ SPECIALIZED_MODES: tuple[str, ...] = tuple(m.value for m in specialized_modes())
 #: The legacy retrieval modes in the order ``supported_mode_values`` publishes them.
 LEGACY_MODE_ORDER: tuple[str, ...] = supported_mode_values()[: len(LEGACY_SEARCH_MODES)]
 
-# The complete Phase 0-9 HTTP surface. Adding an endpoint is a deliberate act.
+# The complete HTTP surface. Adding an endpoint is a deliberate act.
 EXPECTED_ROUTES: dict[str, set[str]] = {
     "/": {"GET"},
     "/health": {"GET"},
@@ -75,6 +75,7 @@ EXPECTED_ROUTES: dict[str, set[str]] = {
     "/api/live-search/usage": {"GET"},
     "/api/ai-answer": {"POST"},
     "/api/ai-answer/usage": {"GET"},
+    "/api/browser/read": {"POST"},
     "/api/answer": {"POST"},
     "/api/crawl": {"GET", "POST"},
     "/api/crawl/{job_id}": {"GET"},
