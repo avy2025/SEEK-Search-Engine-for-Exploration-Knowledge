@@ -22,9 +22,6 @@ from __future__ import annotations
 import asyncio
 import os
 import socket
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Generator
 
 import pytest
 
@@ -35,7 +32,7 @@ from backend.processing.loader import load_corpus
 # Env override for the test database; defaults to the standard local dev
 # seek database (same role/db names the project config already uses).
 _DB_URL_OVERRIDE = "SEEK_TEST_DATABASE_URL"
-_DEFAULT_DB_URL = "postgresql+psycopg2://seek:seek@localhost:5432/seek"
+_DEFAULT_DB_URL = "postgresql+psycopg2://localhost:5432/seek"
 
 _SKIP_REASON = "PostgreSQL unreachable; skipping Phase 5A persistence test"
 
@@ -175,46 +172,32 @@ PAGES: dict[str, tuple[str, str]] = {
 }
 
 
-class _Handler(BaseHTTPRequestHandler):
-    def log_message(self, *args):
-        pass
+def _mock_crawler_response(request):
+    import httpx
 
-    def do_GET(self):
-        path = self.path.split("?")[0].split("#")[0]
-        if path == "/robots.txt":
-            self.send_response(200)
-            self.send_header("content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(ROBOTS_TXT.encode())
-            return
-        entry = PAGES.get(path)
-        if entry is None:
-            self.send_response(404)
-            self.send_header("content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(b"not found")
-            return
-        ctype, body = entry
-        self.send_response(200)
-        self.send_header("content-type", ctype)
-        self.end_headers()
-        self.wfile.write(body.encode())
+    path = request.url.path
+    if path == "/robots.txt":
+        return httpx.Response(
+            200, headers={"content-type": "text/plain"}, content=ROBOTS_TXT
+        )
+    entry = PAGES.get(path)
+    if entry is None:
+        return httpx.Response(404, headers={"content-type": "text/html"})
+    content_type, body = entry
+    return httpx.Response(
+        200, headers={"content-type": content_type}, content=body.encode()
+    )
 
 
-def _get_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+@pytest.fixture
+def crawler_site(monkeypatch):
+    async def public_test_address(_host, _port, **_kwargs):
+        return [(socket.AF_INET, "93.184.216.34")]
 
-
-@pytest.fixture(scope="module")
-def crawler_site() -> Generator[str, None, None]:
-    port = _get_free_port()
-    server = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    yield f"http://127.0.0.1:{port}"
-    server.shutdown()
+    monkeypatch.setattr(
+        "backend.browser.reader.resolve_public_addresses", public_test_address
+    )
+    return "https://phase5a.test"
 
 
 class TestCrawlerPersistence:
@@ -237,13 +220,16 @@ class TestCrawlerPersistence:
             delay_seconds=0,
             max_pages=10,
             max_depth=2,
-            allow_private_hosts=True,
         ).sanitized()
         store = CrawlStore()
         policy = RobotsTxtPolicy(config.user_agent)
 
         async def _crawl():
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(_mock_crawler_response),
+                follow_redirects=False,
+                trust_env=False,
+            ) as client:
                 report, pages, _fails = await a_crawl(
                     config, store, policy, client, on_page=store.record
                 )

@@ -39,6 +39,7 @@ from backend.crawler.url import (
     resolve_url,
     scope_hosts,
 )
+from backend.browser.reader import ReaderError
 
 logger = logging.getLogger("seek.crawler.scheduler")
 
@@ -87,9 +88,7 @@ async def a_crawl(
         # `is_dangerous_url` here would let a loopback/private host or a binary
         # URL supplied as a seed reach the HTTP client, which is exactly the
         # request the crawl is supposed to be forbidden from making.
-        if not is_crawlable_url(
-            canonical, allow_private_hosts=config.allow_private_hosts
-        ):
+        if not is_crawlable_url(canonical):
             failures.append(
                 FailedFetch(url=url, error_code="unparsable_seed", error="unsafe or unparsable seed URL")
             )
@@ -127,11 +126,35 @@ async def a_crawl(
             return
         urls_seen += 1
 
-        await policy.ensure_loaded(client, url)
-        if not policy.can_fetch(url):
-            robots_blocked += 1
-            store.mark_visited(url)
-            return
+        async def ensure_destination_allowed(destination: str) -> None:
+            if not is_crawlable_url(destination):
+                raise ReaderError(
+                    "blocked_destination",
+                    "The crawl destination is not publicly accessible.",
+                    403,
+                )
+            destination_host = hostname_of(destination)
+            if scope and not domain_matches(destination_host, scope):
+                raise ReaderError(
+                    "out_of_scope_redirect",
+                    "A redirect left the approved crawl scope.",
+                    403,
+                )
+            if config.respect_robots:
+                await policy.ensure_loaded(client, destination)
+                if not policy.can_fetch(destination):
+                    raise ReaderError(
+                        "robots_disallowed",
+                        "The website's robots.txt disallows this crawl request.",
+                        403,
+                    )
+
+        if config.respect_robots:
+            await policy.ensure_loaded(client, url)
+            if not policy.can_fetch(url):
+                robots_blocked += 1
+                store.mark_visited(url)
+                return
 
         host = hostname_of(url)
         delay = max(config.delay_seconds, policy.crawl_delay(host))
@@ -143,6 +166,7 @@ async def a_crawl(
             timeout_seconds=config.timeout_seconds,
             max_redirects=config.max_redirects,
             user_agent=config.user_agent,
+            before_request=ensure_destination_allowed,
         )
         if not result.ok:
             if result.error_code == ERR_NON_HTML:
@@ -203,9 +227,7 @@ async def a_crawl(
             return
         for link in _links_from(result.body.decode("utf-8", errors="replace") if result.body else html):
             target = normalize_url(resolve_url(final, link))
-            if not is_crawlable_url(
-                target, allow_private_hosts=config.allow_private_hosts
-            ):
+            if not is_crawlable_url(target):
                 out_of_scope += 1
                 continue
             t_host = hostname_of(target)

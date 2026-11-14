@@ -17,12 +17,18 @@ from backend.crawler.models import (
     CrawlReport,
     CrawlStatus,
 )
-from backend.crawler.service import (
-    CrawlManager,
-    CrawlStore,
-    get_crawl_manager,
-)
 from backend.crawler.url import normalize_url
+
+_SERVICE_EXPORTS = {"CrawlManager", "CrawlStore", "get_crawl_manager"}
+
+
+def __getattr__(name: str):
+    if name not in _SERVICE_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from backend.crawler import service
+
+    return getattr(service, name)
+
 
 __all__ = [
     "CrawlJob",

@@ -7,18 +7,23 @@ an HTML-focused Accept header; responses larger than *max_bytes* are rejected.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
+
 import httpx
-import logging
-from dataclasses import dataclass, field
-from typing import Optional
 
-logger = logging.getLogger("seek.crawler.fetcher")
-
+from backend.browser.reader import (
+    MAX_REDIRECTS,
+    ReaderError,
+    fetch_public_response,
+)
 ERR_TIMEOUT = "timeout"
 ERR_REDIRECTS = "too_many_redirects"
 ERR_TRANSPORT = "connection_error"
 ERR_TOO_LARGE = "content_too_large"
 ERR_NON_HTML = "non_html_content"
+ERR_BLOCKED = "blocked_destination"
+ERR_INVALID_URL = "invalid_url"
 
 MAX_FETCHED_BYTES = 2_000_000
 
@@ -51,10 +56,6 @@ class FetchResult:
         }
 
 
-def _is_html(content_type: str) -> bool:
-    return "html" in (content_type or "").lower() or not content_type
-
-
 async def fetch(
     client: httpx.AsyncClient,
     url: str,
@@ -63,51 +64,49 @@ async def fetch(
     max_redirects: int = 5,
     user_agent: str = "SEEK-Crawler/1.0",
     max_bytes: int = MAX_FETCHED_BYTES,
+    allowed_types: tuple[str, ...] = ("text/html", "application/xhtml+xml", ""),
+    before_request: Callable[[str], Awaitable[None]] | None = None,
 ) -> FetchResult:
     """GET *url* and return a :class:`FetchResult` (never raises)."""
-    headers = {
-        "User-Agent": user_agent,
-        "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-    }
-    timeout = httpx.Timeout(timeout_seconds, connect=timeout_seconds)
+    timeout = httpx.Timeout(timeout_seconds, connect=min(3.0, timeout_seconds))
     try:
-        response = await client.get(
+        final_url, content_type, body, status_code = await fetch_public_response(
+            client,
             url,
-            headers=headers,
+            max_bytes=max_bytes,
+            allowed_types=allowed_types,
+            max_redirects=min(max_redirects, MAX_REDIRECTS),
+            before_request=before_request,
             timeout=timeout,
-            follow_redirects=max_redirects > 0,
+            headers={
+                "User-Agent": user_agent,
+                "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+                "Accept-Encoding": "identity",
+            },
+            return_http_errors=True,
         )
-    except httpx.TimeoutException as exc:  # noqa: BLE001 - typed error
-        return FetchResult(url=url, error_code=ERR_TIMEOUT, error=str(exc))
-    except httpx.TooManyRedirects as exc:  # noqa: BLE001 - typed error
-        return FetchResult(url=url, error_code=ERR_REDIRECTS, error=str(exc))
-    except httpx.HTTPError as exc:  # noqa: BLE001 - transport errors
-        return FetchResult(url=url, error_code=ERR_TRANSPORT, error=str(exc))
-
-    content_type = response.headers.get("content-type", "")
-    if not _is_html(content_type):
+    except ReaderError as exc:
+        error_code = {
+            "reader_timeout": ERR_TIMEOUT,
+            "too_many_redirects": ERR_REDIRECTS,
+            "page_too_large": ERR_TOO_LARGE,
+            "unsupported_content": ERR_NON_HTML,
+            "blocked_destination": ERR_BLOCKED,
+            "invalid_url": ERR_INVALID_URL,
+            "out_of_scope_redirect": "out_of_scope_redirect",
+            "robots_disallowed": "robots_disallowed",
+        }.get(exc.code, ERR_TRANSPORT)
         return FetchResult(
             url=url,
-            final_url=str(response.url),
-            status_code=response.status_code,
-            content_type=content_type,
-            error_code=ERR_NON_HTML,
-            error=f"content-type {content_type!r} is not HTML",
+            error_code=error_code,
+            error=exc.message,
         )
-    body = response.content
-    if body and len(body) > max_bytes:
-        return FetchResult(
-            url=url,
-            final_url=str(response.url),
-            status_code=response.status_code,
-            content_type=content_type,
-            error_code=ERR_TOO_LARGE,
-            error=f"body exceeds {max_bytes} bytes",
-        )
+    except (httpx.HTTPError, OSError, TimeoutError):
+        return FetchResult(url=url, error_code=ERR_TRANSPORT, error="The page could not be fetched.")
     return FetchResult(
         url=url,
-        final_url=str(response.url),
-        status_code=response.status_code,
+        final_url=final_url,
+        status_code=status_code,
         content_type=content_type,
         body=body,
     )
@@ -121,4 +120,6 @@ __all__ = [
     "ERR_TRANSPORT",
     "ERR_TOO_LARGE",
     "ERR_NON_HTML",
+    "ERR_BLOCKED",
+    "ERR_INVALID_URL",
 ]

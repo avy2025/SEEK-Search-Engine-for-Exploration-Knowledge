@@ -303,24 +303,13 @@ class TestCrawlUrlSafety:
     def test_private_loopback_and_link_local_hosts_are_refused(self, url):
         assert is_private_host(url) is True
         assert is_crawlable_url(url) is False
-        assert is_crawlable_url(url, allow_private_hosts=True) is True, (
-            "private hosts are refused by default, permitted only explicitly"
-        )
 
-    def test_private_host_detection_is_literal_only_and_says_so(self):
-        """Documented limitation: no DNS resolution happens in the safety gate.
-
-        ``is_private_host`` is a *literal* check (``ipaddress`` plus the
-        ``.local``/``.localdomain`` suffixes). A hostname that only *resolves* to
-        a private address (``127.1``, ``metadata.google.internal``) is therefore
-        not caught here - the gate is one layer, not the only one. This test pins
-        the behaviour so a future change to it is deliberate.
-        """
-        for url in ("http://127.1/", "http://metadata.google.internal/"):
-            assert is_private_host(url) is False, url
-            assert is_crawlable_url(url) is True, url
-        # An explicit allowlist is still the outer bound: the scheduler also
-        # requires the host to match the seed scope.
+    def test_private_host_gate_rejects_reserved_names(self):
+        assert is_private_host("http://metadata.google.internal/") is True
+        assert is_crawlable_url("http://metadata.google.internal/") is False
+        # Alternate numeric IPv4 forms are checked after DNS resolution/pinning.
+        assert is_private_host("http://127.1/") is False
+        assert is_crawlable_url("http://127.1/") is True
         assert domain_matches(hostname_of("http://127.1/"), ("example.com",)) is False
 
     @pytest.mark.parametrize(

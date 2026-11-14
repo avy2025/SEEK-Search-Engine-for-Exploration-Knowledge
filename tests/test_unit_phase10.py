@@ -3,7 +3,7 @@
 This module is the *complementary* half of the per-phase suites that already
 ship in ``tests/``. It does not repeat them: ``test_search_phase2.py`` pins the
 end-to-end Phase 2 contract, ``test_search_modes_phase9.py`` pins mode
-behaviour, ``test_crawler_phase4.py`` drives a real local HTTP server, and so
+behaviour, ``test_crawler_phase4.py`` uses a mocked HTTP transport, and so
 on. What follows is the *branch* coverage those suites cannot reach without a
 live database, a real crawler run or a model download:
 
@@ -25,6 +25,7 @@ import asyncio
 import json
 import math
 import pickle
+import socket
 import time
 from pathlib import Path
 from typing import Any
@@ -1695,10 +1696,9 @@ class TestUrlSafety:
         assert not is_crawlable_url("https://example.com/a.zip")
         assert ".pdf" in UNWANTED_EXTENSIONS
 
-    def test_private_hosts_are_crawlable_only_when_explicitly_allowed(self):
-        url = "http://127.0.0.1:8000/page"
+    def test_private_hosts_are_never_crawlable(self):
+        url = "http://127.0.0.1/page"
         assert not is_crawlable_url(url)
-        assert is_crawlable_url(url, allow_private_hosts=True)
 
     def test_is_http_url(self):
         assert is_http_url("http://x/") and is_http_url("https://x/")
@@ -1812,55 +1812,64 @@ class TestRobotsPolicy:
         assert policy.can_fetch("https://example.com/x")
 
     def test_fetch_robots_status_mapping(self, monkeypatch):
-        class _AsyncClient:
-            def __init__(self, response=None, error=None):
-                self._response = response
-                self._error = error
-                self.requested: list[str] = []
+        from types import SimpleNamespace
 
-            async def get(self, url, **kwargs):
-                self.requested.append(url)
-                if self._error is not None:
-                    raise self._error
-                return self._response
+        async def fake_fetch(_client, url, **kwargs):
+            return responses[url]
 
+        responses = {
+            "https://example.com/robots.txt": SimpleNamespace(
+                ok=True, status_code=200, body=b"User-agent: *\nAllow: /\n"
+            ),
+        }
+        monkeypatch.setattr("backend.crawler.robots.fetch", fake_fetch)
         policy = RobotsTxtPolicy("SEEK-Test", timeout_seconds=1.0)
         allowed = asyncio.run(
-            policy._fetch_robots(_AsyncClient(_StubResponse(200, text="User-agent: *\nAllow: /\n")), "https://example.com/")
+            policy._fetch_robots(object(), "https://example.com/")
         )
         assert "Allow" in allowed
 
+        responses["https://example.com/robots.txt"] = SimpleNamespace(
+            ok=True, status_code=403, body=b""
+        )
         blocked = asyncio.run(
-            policy._fetch_robots(_AsyncClient(_StubResponse(403, text="")), "https://example.com/")
+            policy._fetch_robots(object(), "https://example.com/")
         )
         assert "Disallow: /" in blocked
 
+        responses["https://example.com/robots.txt"] = SimpleNamespace(
+            ok=True, status_code=404, body=b""
+        )
         missing = asyncio.run(
-            policy._fetch_robots(_AsyncClient(_StubResponse(404, text="")), "https://example.com/")
+            policy._fetch_robots(object(), "https://example.com/")
         )
         assert missing == ""
 
-        unreachable = asyncio.run(
-            policy._fetch_robots(
-                _AsyncClient(error=httpx.ConnectError("nope")), "https://example.com/"
-            )
+        responses["https://example.com/robots.txt"] = SimpleNamespace(
+            ok=False, status_code=0, body=b"", error_code="connection_error"
         )
+        unreachable = asyncio.run(policy._fetch_robots(object(), "https://example.com/"))
         assert unreachable == ""
 
-    def test_ensure_loaded_is_idempotent(self):
-        class _AsyncClient:
-            def __init__(self):
-                self.calls = 0
+    def test_ensure_loaded_is_idempotent(self, monkeypatch):
+        from types import SimpleNamespace
 
-            async def get(self, url, **kwargs):
-                self.calls += 1
-                return _StubResponse(200, text="User-agent: *\nDisallow: /\n")
+        calls = []
 
+        async def fake_fetch(_client, url, **kwargs):
+            calls.append(url)
+            return SimpleNamespace(
+                ok=True,
+                status_code=200,
+                body=b"User-agent: *\nDisallow: /\n",
+            )
+
+        monkeypatch.setattr("backend.crawler.robots.fetch", fake_fetch)
         policy = RobotsTxtPolicy("SEEK-Test")
-        client = _AsyncClient()
+        client = object()
         asyncio.run(policy.ensure_loaded(client, "https://example.com/a"))
         asyncio.run(policy.ensure_loaded(client, "https://example.com/b"))
-        assert client.calls == 1
+        assert calls == ["https://example.com/robots.txt"]
         assert not policy.can_fetch("https://example.com/a")
 
     def test_ensure_loaded_ignores_unparsable_urls(self):
@@ -1955,68 +1964,102 @@ class TestLinkExtraction:
 
 
 class TestFetcher:
-    class _Client:
-        def __init__(self, response=None, error=None):
-            self._response = response
-            self._error = error
-            self.calls: list[dict[str, Any]] = []
+    @pytest.fixture(autouse=True)
+    def public_dns(self, monkeypatch):
+        async def resolve_public(_host, _port, **_kwargs):
+            return [(socket.AF_INET, "93.184.216.34")]
 
-        async def get(self, url, **kwargs):
-            self.calls.append({"url": url, **kwargs})
-            if self._error is not None:
-                raise self._error
-            return self._response
+        monkeypatch.setattr(
+            "backend.browser.reader.resolve_public_addresses", resolve_public
+        )
 
-    def _response(self, *, body=b"<html></html>", status=200, content_type="text/html; charset=utf-8"):
+    def _run_fetch(self, handler, url="https://example.com/p", **kwargs):
+        async def run():
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(handler),
+                follow_redirects=False,
+                trust_env=False,
+            ) as client:
+                return await fetch(client, url, **kwargs)
+
+        return asyncio.run(run())
+
+    def _response(self, request, *, body=b"<html></html>", status=200, content_type="text/html; charset=utf-8", headers=None):
+        response_headers = {"content-type": content_type}
+        if headers:
+            response_headers.update(headers)
         return httpx.Response(
             status_code=status,
-            headers={"content-type": content_type},
+            headers=response_headers,
             content=body,
-            request=httpx.Request("GET", "https://example.com/p"),
+            request=request,
         )
 
     def test_successful_fetch(self):
-        client = self._Client(self._response(body=b"hello"))
-        result = asyncio.run(fetch(client, "https://example.com/p"))
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            return self._response(request, body=b"hello")
+
+        result = self._run_fetch(handler)
         assert result.ok
         assert result.body == b"hello"
         assert result.status_code == 200
         assert result.error_code == ""
         assert result.as_dict()["body_bytes"] == 5
-        assert client.calls[0]["headers"]["User-Agent"]
+        assert requests[0].headers["User-Agent"]
 
     def test_missing_content_type_is_treated_as_html(self):
-        client = self._Client(self._response(content_type=""))
-        assert asyncio.run(fetch(client, "https://example.com/p")).ok
+        result = self._run_fetch(
+            lambda request: self._response(request, content_type="")
+        )
+        assert result.ok
 
     def test_timeout_is_typed(self):
-        client = self._Client(error=httpx.TimeoutException("slow"))
-        result = asyncio.run(fetch(client, "https://example.com/p"))
+        def handler(request):
+            raise httpx.ReadTimeout("slow", request=request)
+
+        result = self._run_fetch(handler)
         assert result.error_code == ERR_TIMEOUT
         assert not result.ok
 
     def test_redirect_loop_is_typed(self):
-        client = self._Client(error=httpx.TooManyRedirects("loop"))
-        assert asyncio.run(fetch(client, "https://x/")).error_code == ERR_REDIRECTS
+        result = self._run_fetch(
+            lambda request: httpx.Response(
+                302, headers={"location": str(request.url)}, request=request
+            )
+        )
+        assert result.error_code == ERR_REDIRECTS
 
     def test_transport_error_is_typed(self):
-        client = self._Client(error=httpx.ConnectError("refused"))
-        assert asyncio.run(fetch(client, "https://x/")).error_code == ERR_TRANSPORT
+        def handler(request):
+            raise httpx.ConnectError("refused", request=request)
+
+        assert self._run_fetch(handler).error_code == ERR_TRANSPORT
 
     def test_non_html_content_is_rejected(self):
-        client = self._Client(self._response(content_type="application/pdf"))
-        result = asyncio.run(fetch(client, "https://x/f.pdf"))
+        result = self._run_fetch(
+            lambda request: self._response(request, content_type="application/pdf"),
+            "https://example.com/file",
+        )
         assert result.error_code == ERR_NON_HTML
         assert not result.ok
 
     def test_oversized_bodies_are_rejected(self):
-        client = self._Client(self._response(body=b"x" * 100))
-        result = asyncio.run(fetch(client, "https://x/", max_bytes=10))
+        result = self._run_fetch(
+            lambda request: self._response(
+                request,
+                body=b"x",
+                headers={"content-length": "100"},
+            ),
+            "https://example.com/",
+            max_bytes=10,
+        )
         assert result.error_code == ERR_TOO_LARGE
 
     def test_empty_body_is_allowed(self):
-        client = self._Client(self._response(body=b""))
-        result = asyncio.run(fetch(client, "https://x/"))
+        result = self._run_fetch(lambda request: self._response(request, body=b""))
         assert result.ok and result.body == b""
 
 

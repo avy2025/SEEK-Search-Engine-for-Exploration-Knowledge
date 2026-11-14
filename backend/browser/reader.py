@@ -81,7 +81,12 @@ def validate_reader_url(url: str) -> str:
         raise ReaderError("invalid_url", "Only public HTTP and HTTPS pages can be read.", 422)
 
     host = host.rstrip(".").lower()
-    if not host or host in {"metadata", "metadata.google.internal"}:
+    if not host or host in {
+        "localhost",
+        "localhost.localdomain",
+        "metadata",
+        "metadata.google.internal",
+    } or host.endswith((".localhost", ".local", ".localdomain", ".internal")):
         raise ReaderError("blocked_destination", "This destination is not available in Reader Mode.", 422)
     normalized_netloc = f"[{host}]" if ":" in host else host
     if port is not None:
@@ -89,7 +94,12 @@ def validate_reader_url(url: str) -> str:
     return urlunsplit((scheme, normalized_netloc, parts.path or "/", parts.query, ""))
 
 
-async def resolve_public_addresses(host: str, port: int) -> list[tuple[int, str]]:
+async def resolve_public_addresses(
+    host: str,
+    port: int,
+    *,
+    timeout_seconds: float = REQUEST_TIMEOUT_SECONDS,
+) -> list[tuple[int, str]]:
     """Resolve every candidate and refuse mixed or non-public DNS answers."""
     try:
         literal = ipaddress.ip_address(host)
@@ -99,7 +109,7 @@ async def resolve_public_addresses(host: str, port: int) -> list[tuple[int, str]
             loop = asyncio.get_running_loop()
             records = await asyncio.wait_for(
                 loop.getaddrinfo(host, port, type=socket.SOCK_STREAM),
-                timeout=REQUEST_TIMEOUT_SECONDS,
+                timeout=max(0.1, timeout_seconds),
             )
         except (OSError, TimeoutError, UnicodeError) as exc:
             raise ReaderError("destination_unavailable", "The website could not be reached.") from exc
@@ -198,7 +208,11 @@ class _PublicNetworkBackend(httpcore.AsyncNetworkBackend):
         local_address: str | None = None,
         socket_options: Iterable[tuple[int, int, int | bytes]] | None = None,
     ) -> _PinnedStream:
-        addresses = await resolve_public_addresses(host, port)
+        addresses = await resolve_public_addresses(
+            host,
+            port,
+            timeout_seconds=timeout or REQUEST_TIMEOUT_SECONDS,
+        )
         last_error: OSError | None = None
         for family, address in addresses:
             try:
@@ -240,10 +254,10 @@ class _PublicNetworkBackend(httpcore.AsyncNetworkBackend):
 class _PinnedTransport(httpx.AsyncBaseTransport):
     """HTTPX adapter backed by a DNS-pinning HTTP Core connection pool."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_connections: int = 4) -> None:
         self._pool = httpcore.AsyncConnectionPool(
             ssl_context=ssl.create_default_context(),
-            max_connections=4,
+            max_connections=max(1, min(32, max_connections)),
             max_keepalive_connections=0,
             http2=False,
             network_backend=_PublicNetworkBackend(),
@@ -283,15 +297,38 @@ class _PinnedTransport(httpx.AsyncBaseTransport):
         await self._pool.aclose()
 
 
+def create_public_http_client(
+    *,
+    timeout: httpx.Timeout | float = REQUEST_TIMEOUT_SECONDS,
+    headers: dict[str, str] | None = None,
+    max_connections: int = 4,
+) -> httpx.AsyncClient:
+    """Create an HTTP client that pins each connection to validated public DNS."""
+    client_headers = {"Accept-Encoding": "identity"}
+    if headers:
+        client_headers.update(headers)
+    return httpx.AsyncClient(
+        transport=_PinnedTransport(max_connections=max_connections),
+        timeout=timeout,
+        follow_redirects=False,
+        trust_env=False,
+        headers=client_headers,
+    )
+
+
 async def _read_limited_response(
     client: httpx.AsyncClient,
     url: str,
     *,
     max_bytes: int,
     allowed_types: tuple[str, ...],
+    timeout: httpx.Timeout | None = None,
+    headers: dict[str, str] | None = None,
 ) -> tuple[int, str, bytes, str]:
     try:
-        async with client.stream("GET", url) as response:
+        async with client.stream(
+            "GET", url, follow_redirects=False, timeout=timeout, headers=headers
+        ) as response:
             content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
             if response.status_code in {301, 302, 303, 307, 308}:
                 return response.status_code, content_type, b"", response.headers.get("location", "")
@@ -308,6 +345,11 @@ async def _read_limited_response(
                         raise ReaderError("page_too_large", "This page is too large to open in Reader Mode.")
                 except ValueError:
                     pass
+            if response.is_stream_consumed:
+                body = response.content
+                if len(body) > max_bytes:
+                    raise ReaderError("page_too_large", "This page is too large to open in Reader Mode.")
+                return response.status_code, content_type, body, ""
             chunks: list[bytes] = []
             total = 0
             async for chunk in response.aiter_raw():
@@ -338,30 +380,72 @@ async def _get_with_validated_redirects(
     max_bytes: int,
     allowed_types: tuple[str, ...],
     before_request: Callable[[str], Awaitable[None]] | None = None,
+    max_redirects: int = MAX_REDIRECTS,
+    timeout: httpx.Timeout | None = None,
+    headers: dict[str, str] | None = None,
+    return_http_errors: bool = False,
 ) -> tuple[str, str, bytes, int]:
     current = validate_reader_url(url)
-    for redirect_count in range(MAX_REDIRECTS + 1):
+    redirect_limit = max(0, min(MAX_REDIRECTS, max_redirects))
+    for redirect_count in range(redirect_limit + 1):
         if before_request is not None:
             await before_request(current)
         parts = urlsplit(current)
-        await resolve_public_addresses(parts.hostname or "", parts.port or (443 if parts.scheme == "https" else 80))
+        dns_timeout = (
+            timeout.connect
+            if timeout is not None and timeout.connect is not None
+            else REQUEST_TIMEOUT_SECONDS
+        )
+        await resolve_public_addresses(
+            parts.hostname or "",
+            parts.port or (443 if parts.scheme == "https" else 80),
+            timeout_seconds=dns_timeout,
+        )
         status_code, content_type, body, location = await _read_limited_response(
             client,
             current,
             max_bytes=max_bytes,
             allowed_types=allowed_types,
+            timeout=timeout,
+            headers=headers,
         )
         if status_code in {301, 302, 303, 307, 308}:
-            if redirect_count == MAX_REDIRECTS or not location:
+            if redirect_count == redirect_limit or not location:
                 raise ReaderError("too_many_redirects", "The website redirected too many times.")
             current = validate_reader_url(urljoin(current, location))
             continue
         if status_code in {401, 403}:
             return current, content_type, body, status_code
-        if status_code >= 400:
+        if status_code >= 400 and not return_http_errors:
             raise ReaderError("reader_unavailable", "The website could not be loaded in Reader Mode.")
         return current, content_type, body, status_code
     raise ReaderError("too_many_redirects", "The website redirected too many times.")
+
+
+async def fetch_public_response(
+    client: httpx.AsyncClient,
+    url: str,
+    *,
+    max_bytes: int,
+    allowed_types: tuple[str, ...],
+    max_redirects: int = MAX_REDIRECTS,
+    before_request: Callable[[str], Awaitable[None]] | None = None,
+    timeout: httpx.Timeout | None = None,
+    headers: dict[str, str] | None = None,
+    return_http_errors: bool = False,
+) -> tuple[str, str, bytes, int]:
+    """Fetch a bounded public response, validating and pinning each redirect."""
+    return await _get_with_validated_redirects(
+        client,
+        url,
+        max_bytes=max_bytes,
+        allowed_types=allowed_types,
+        before_request=before_request,
+        max_redirects=max_redirects,
+        timeout=timeout,
+        headers=headers,
+        return_http_errors=return_http_errors,
+    )
 
 
 def _published_date(soup: BeautifulSoup) -> str | None:
@@ -461,15 +545,11 @@ async def read_public_page(url: str) -> ReaderPage:
     """Fetch one public page with robots checks and bounded, pinned requests."""
     normalized = validate_reader_url(url)
     timeout = httpx.Timeout(REQUEST_TIMEOUT_SECONDS, connect=3.0)
-    async with httpx.AsyncClient(
-        transport=_PinnedTransport(),
+    async with create_public_http_client(
         timeout=timeout,
-        follow_redirects=False,
-        trust_env=False,
         headers={
             "User-Agent": USER_AGENT,
             "Accept": "text/html,application/xhtml+xml",
-            "Accept-Encoding": "identity",
         },
     ) as client:
         try:
@@ -548,6 +628,8 @@ __all__ = [
     "ReaderPage",
     "extract_reader_page",
     "read_public_page",
+    "create_public_http_client",
+    "fetch_public_response",
     "resolve_public_addresses",
     "validate_reader_url",
 ]

@@ -63,7 +63,7 @@ def test_dns_resolution_rejects_private_addresses_in_mixed_results(monkeypatch):
 
 
 def test_network_backend_connects_to_the_validated_ip_not_hostname(monkeypatch):
-    async def public_addresses(_host, _port):
+    async def public_addresses(_host, _port, **_kwargs):
         return [(socket.AF_INET, "8.8.8.8")]
 
     calls = []
@@ -90,7 +90,7 @@ def test_network_backend_connects_to_the_validated_ip_not_hostname(monkeypatch):
 def test_reader_redirect_to_private_address_is_blocked_before_second_request(monkeypatch):
     requests = []
 
-    async def public_addresses(host, _port):
+    async def public_addresses(host, _port, **_kwargs):
         if host == "example.com":
             return [(socket.AF_INET, "8.8.8.8")]
         return await resolve_public_addresses(host, 80)
@@ -221,10 +221,19 @@ def test_reader_honors_robots_and_uses_mocked_html_only(monkeypatch):
                 stream=MockBody(b"<article><h1>Allowed</h1><p>Article body</p></article>"),
         )
 
-    async def public_addresses(_host, _port):
+    async def public_addresses(_host, _port, **_kwargs):
         return [(socket.AF_INET, "8.8.8.8")]
 
-    monkeypatch.setattr(reader, "_PinnedTransport", lambda: httpx.MockTransport(handler))
+    monkeypatch.setattr(
+        reader,
+        "create_public_http_client",
+        lambda **kwargs: httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=False,
+            trust_env=False,
+            **{key: value for key, value in kwargs.items() if key in {"headers", "timeout"}},
+        ),
+    )
     monkeypatch.setattr(reader, "resolve_public_addresses", public_addresses)
 
     page = asyncio.run(read_public_page("https://example.com/article"))
@@ -255,10 +264,19 @@ def test_redirected_host_robots_policy_is_checked_before_fetching_its_page(monke
             )
         return httpx.Response(200, headers={"content-type": "text/html"}, stream=MockBody(b"<p>Never read</p>"))
 
-    async def public_addresses(_host, _port):
+    async def public_addresses(_host, _port, **_kwargs):
         return [(socket.AF_INET, "8.8.8.8")]
 
-    monkeypatch.setattr(reader, "_PinnedTransport", lambda: httpx.MockTransport(handler))
+    monkeypatch.setattr(
+        reader,
+        "create_public_http_client",
+        lambda **kwargs: httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=False,
+            trust_env=False,
+            **{key: value for key, value in kwargs.items() if key in {"headers", "timeout"}},
+        ),
+    )
     monkeypatch.setattr(reader, "resolve_public_addresses", public_addresses)
     with pytest.raises(ReaderError) as error:
         asyncio.run(read_public_page("https://example.com/start"))
@@ -276,10 +294,19 @@ def test_reader_reports_unavailable_when_a_site_has_no_extractable_article(monke
             stream=MockBody(b"<html><script>dynamic page</script></html>"),
         )
 
-    async def public_addresses(_host, _port):
+    async def public_addresses(_host, _port, **_kwargs):
         return [(socket.AF_INET, "8.8.8.8")]
 
-    monkeypatch.setattr(reader, "_PinnedTransport", lambda: httpx.MockTransport(handler))
+    monkeypatch.setattr(
+        reader,
+        "create_public_http_client",
+        lambda **kwargs: httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=False,
+            trust_env=False,
+            **{key: value for key, value in kwargs.items() if key in {"headers", "timeout"}},
+        ),
+    )
     monkeypatch.setattr(reader, "resolve_public_addresses", public_addresses)
     with pytest.raises(ReaderError) as error:
         asyncio.run(read_public_page("https://example.com/"))

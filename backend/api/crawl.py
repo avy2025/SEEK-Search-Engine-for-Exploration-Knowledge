@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.config import settings
 from backend.crawler.models import CrawlJobConfig
@@ -20,6 +20,8 @@ router = APIRouter(prefix="/api/crawl", tags=["crawl"])
 
 
 class CrawlRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     urls: list[str] = Field(..., min_length=1, description="Seed URLs to crawl")
     allowed_domains: Optional[list[str]] = Field(
         None, description="Extra host allowlist (blank scope = seed hosts)"
@@ -42,10 +44,6 @@ class CrawlRequest(BaseModel):
     respect_robots: bool = Field(
         default=settings.CRAWLER_RESPECT_ROBOTS, description="Honour robots.txt"
     )
-    allow_private_hosts: bool = Field(
-        default=False, description="Permit loopback/private addresses (tests/local)"
-    )
-
 
 @router.post("", status_code=201, name="crawl")
 def start_crawl(request: CrawlRequest) -> dict[str, object]:
@@ -60,7 +58,6 @@ def start_crawl(request: CrawlRequest) -> dict[str, object]:
         timeout_seconds=request.timeout_seconds,
         user_agent=settings.CRAWLER_USER_AGENT,
         respect_robots=request.respect_robots,
-        allow_private_hosts=request.allow_private_hosts,
     ).sanitized()
     if not config.seed_urls:
         # Pydantic only enforces a non-empty *list*; a list of blanks survives

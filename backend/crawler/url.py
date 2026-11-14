@@ -43,7 +43,9 @@ UNWANTED_EXTENSIONS = frozenset(
 )
 
 # Hostnames that are clearly not public web content regardless of DNS.
-LOCAL_HOSTNAMES = frozenset({"localhost", "localhost.localdomain"})
+LOCAL_HOSTNAMES = frozenset(
+    {"localhost", "localhost.localdomain", "metadata", "metadata.google.internal"}
+)
 
 _REGEX_IPV6 = re.compile(r"^[0-9a-f:]+$")
 
@@ -139,33 +141,19 @@ def is_http_url(url: str) -> bool:
 
 
 def _looks_like_private_host(host: str) -> bool:
-    """Best-effort private/loopback detection for literals + obvious hostnames."""
+    """Reject non-public IP literals and names reserved for local networks."""
     if not host:
         return True
     lowered = host.lower()
     if lowered in LOCAL_HOSTNAMES:
         return True
-    if lowered.endswith(".local") or lowered.endswith(".localdomain"):
+    if lowered.endswith((".localhost", ".local", ".localdomain", ".internal")):
         return True
-    if _REGEX_IPV6.match(host):
-        try:
-            return ipaddress.ip_address(host).is_private or (
-                ipaddress.ip_address(host).is_loopback
-                or ipaddress.ip_address(host).is_link_local
-                or ipaddress.ip_address(host).is_reserved
-                or ipaddress.ip_address(host).is_unspecified
-            )
-        except ValueError:
-            return False
-    # IPv4 literals
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
         return False
-    return (
-        addr.is_private or addr.is_loopback or addr.is_link_local
-        or addr.is_reserved or addr.is_unspecified
-    )
+    return not addr.is_global
 
 
 def is_private_host(url: str) -> bool:
@@ -177,7 +165,7 @@ def has_embedded_credentials(url: str) -> bool:
         parts = urlsplit(url)
     except ValueError:
         return False
-    return bool(parts.username)
+    return parts.username is not None or parts.password is not None
 
 
 def has_unwanted_extension(url: str) -> bool:
@@ -202,13 +190,22 @@ def is_dangerous_url(url: str) -> bool:
     return False
 
 
-def is_crawlable_url(url: str, *, allow_private_hosts: bool = False) -> bool:
+def is_crawlable_url(url: str) -> bool:
     """Full safety gate used by the scheduler before any HTTP request."""
     if is_dangerous_url(url):
         return False
     if has_unwanted_extension(url):
         return False
-    if not allow_private_hosts and is_private_host(url):
+    if is_private_host(url):
+        return False
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return False
+    if (parts.scheme.lower() == "http" and port not in (None, 80)) or (
+        parts.scheme.lower() == "https" and port not in (None, 443)
+    ):
         return False
     return True
 

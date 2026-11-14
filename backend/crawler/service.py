@@ -25,6 +25,7 @@ from typing import Optional
 
 import httpx
 
+from backend.browser.reader import create_public_http_client
 from backend.config import settings
 from backend.crawler.models import (
     CrawlJob,
@@ -189,9 +190,17 @@ class CrawlManager:
 
     async def _execute(self, job: CrawlJob) -> None:
         config = job.config
-        async with httpx.AsyncClient(
-            follow_redirects=config.max_redirects > 0,
-            max_redirects=config.max_redirects,
+        timeout = httpx.Timeout(
+            config.timeout_seconds,
+            connect=min(3.0, config.timeout_seconds),
+        )
+        async with create_public_http_client(
+            timeout=timeout,
+            max_connections=config.concurrency,
+            headers={
+                "User-Agent": config.user_agent,
+                "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+            },
         ) as client:
             policy = RobotsTxtPolicy(
                 config.user_agent,

@@ -17,6 +17,8 @@ import urllib.robotparser
 from typing import Optional
 from urllib.parse import urlsplit
 
+from backend.browser.reader import MAX_ROBOTS_BYTES
+from backend.crawler.fetcher import fetch
 from backend.crawler.url import hostname_of
 
 logger = logging.getLogger("seek.crawler.robots")
@@ -56,26 +58,24 @@ class RobotsTxtPolicy:
     async def _fetch_robots(self, client: httpx.AsyncClient, url: str) -> str:
         """Return robots.txt body for *url* ("" on unreachable/not-found)."""
         robots_url = self._robots_url(url)
-        try:
-            response = await client.get(
-                robots_url,
-                timeout=self.timeout_seconds,
-                follow_redirects=self.max_redirects > 0,
-                headers={"User-Agent": self.user_agent},
-            )
-        except httpx.HTTPError as exc:  # noqa: BLE001 - robots failure = allow
-            logger.debug("robots.txt unreachable for %s: %s", robots_url, exc)
+        result = await fetch(
+            client,
+            robots_url,
+            timeout_seconds=self.timeout_seconds,
+            max_redirects=self.max_redirects,
+            user_agent=self.user_agent,
+            max_bytes=MAX_ROBOTS_BYTES,
+            allowed_types=("", "text/plain", "text/html"),
+        )
+        if not result.ok:
+            logger.debug("robots.txt unavailable for %s: %s", robots_url, result.error_code)
             return ""
-        if response.status_code in (401, 403):
+        if result.status_code in (401, 403):
             # Explicit block: robots.txt exists but forbids our agent broadly.
             return "Disallow: /"
-        if response.status_code != 200:
+        if result.status_code != 200:
             return ""
-        try:
-            return response.text
-        except Exception as exc:  # noqa: BLE001 - never crash on decode
-            logger.debug("robots.txt decode failed for %s: %s", robots_url, exc)
-            return ""
+        return result.body.decode("utf-8", errors="replace")
 
     def _load(self, host: str, body: str) -> urllib.robotparser.RobotFileParser:
         parser = urllib.robotparser.RobotFileParser()

@@ -38,7 +38,6 @@ class CrawlJobConfig:
     max_content_chars: int = 200_000
     user_agent: str = "SEEK-Crawler/1.0"
     respect_robots: bool = True
-    allow_private_hosts: bool = False
 
     def sanitized(self) -> "CrawlJobConfig":
         """Return a copy with hardened bounds (no negative/zero weirdness)."""
@@ -58,7 +57,6 @@ class CrawlJobConfig:
             max_content_chars=max(1_000, int(self.max_content_chars)),
             user_agent=(self.user_agent or "SEEK-Crawler/1.0").strip(),
             respect_robots=bool(self.respect_robots),
-            allow_private_hosts=bool(self.allow_private_hosts),
         )
 
 

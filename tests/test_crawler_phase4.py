@@ -1,20 +1,18 @@
 """Phase 4 (controlled web crawler) acceptance tests.
 
-No external network required. A tiny in-process ``http.server`` fixture serves a
-deterministic 4-page site with robots.txt, a binary media path, a 404 path, and
-one page that links to an out-of-scope host. The crawler logic (robots gating,
-scope filtering, rate-limit, dedup) is tested end-to-end via
+No external network required. An HTTPX MockTransport serves a deterministic
+multi-page site with robots.txt, binary content, a 404, and out-of-scope links.
+The crawler logic (robots gating, scope filtering, rate-limit, dedup) is tested
+end-to-end via
 :func:`backend.crawler.scheduler.a_crawl` and the ``/api/crawl`` job API.
 """
 from __future__ import annotations
 
 import asyncio
 import socket
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Generator, Optional
 
+import httpx
 import pytest
 
 from backend.crawler.extract import chunk_text, extract_text, hash_text
@@ -31,7 +29,7 @@ from backend.crawler.url import (
 )
 
 # --------------------------------------------------------------------------- #
-# Tiny in-process site
+# Mock site
 # --------------------------------------------------------------------------- #
 
 ROBOTS_TXT = """User-agent: *
@@ -87,52 +85,48 @@ PAGES: dict[str, tuple[str, str]] = {
 }
 
 
-def _get_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+def _mock_site_response(request: httpx.Request) -> httpx.Response:
+    path = request.url.path
+    if path == "/robots.txt":
+        return httpx.Response(
+            200, headers={"content-type": "text/plain"}, content=ROBOTS_TXT
+        )
+    entry = PAGES.get(path)
+    if entry is None:
+        return httpx.Response(
+            404, headers={"content-type": "text/html"}, content=b"not found"
+        )
+    content_type, body = entry
+    status_code = 404 if path == "/missing.html" else 200
+    return httpx.Response(
+        status_code,
+        headers={"content-type": content_type},
+        content=body.encode(),
+    )
 
 
-class _Handler(BaseHTTPRequestHandler):
-    def log_message(self, *args):  # noqa: D401
-        pass
-
-    def do_GET(self):
-        path = self.path.split("?")[0].split("#")[0]
-        if path == "/robots.txt":
-            self.send_response(200)
-            self.send_header("content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(ROBOTS_TXT.encode())
-            return
-        entry = PAGES.get(path)
-        if entry is None:
-            self.send_response(404)
-            self.send_header("content-type", "text/html")
-            self.end_headers()
-            self.wfile.write(b"not found")
-            return
-        ctype, body = entry
-        if path == "/missing.html":
-            self.send_response(404)
-            self.send_header("content-type", ctype)
-            self.end_headers()
-            self.wfile.write(body.encode())
-            return
-        self.send_response(200)
-        self.send_header("content-type", ctype)
-        self.end_headers()
-        self.wfile.write(body.encode())
+def _mock_crawler_client(**kwargs) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=httpx.MockTransport(_mock_site_response),
+        follow_redirects=False,
+        trust_env=False,
+        **{key: value for key, value in kwargs.items() if key in {"headers", "timeout"}},
+    )
 
 
-@pytest.fixture(scope="module")
-def crawler_site() -> Generator[tuple[str, int], None, None]:
-    port = _get_free_port()
-    server = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    yield f"http://127.0.0.1:{port}", port
-    server.shutdown()
+@pytest.fixture
+def crawler_site(monkeypatch):
+    async def public_test_address(_host: str, _port: int, **_kwargs):
+        return [(socket.AF_INET, "93.184.216.34")]
+
+    monkeypatch.setattr(
+        "backend.browser.reader.resolve_public_addresses", public_test_address
+    )
+    monkeypatch.setattr(
+        "backend.crawler.service.create_public_http_client",
+        _mock_crawler_client,
+    )
+    return "https://crawl.test", 443
 
 
 # --------------------------------------------------------------------------- #
@@ -160,10 +154,8 @@ class TestURLHelpers:
         assert not is_crawlable_url("http://example.com/report.pdf")
 
     def test_is_crawlable_blocks_localhost_by_default(self):
+        assert not is_crawlable_url("http://localhost/x")
         assert not is_crawlable_url("http://localhost:8080/x")
-        assert is_crawlable_url(
-            "http://localhost:8080/x", allow_private_hosts=True
-        )
 
     def test_domain_matches_subdomain(self):
         assert domain_matches("sub.docs.python.org", ("python.org",))
@@ -255,15 +247,12 @@ class TestScheduler:
             concurrency=2,
             max_pages=20,
             max_depth=3,
-            allow_private_hosts=True,
             respect_robots=True,
         ).sanitized()
         store = CrawlStore()
         policy = RobotsTxtPolicy(config.user_agent, timeout_seconds=5)
-        import httpx
-
         async def _run():
-            async with httpx.AsyncClient() as client:
+            async with _mock_crawler_client() as client:
                 report, pages, failures = await a_crawl(
                     config, store, policy, client, on_page=store.record
                 )
@@ -289,14 +278,11 @@ class TestScheduler:
             delay_seconds=0,
             max_pages=2,
             max_depth=3,
-            allow_private_hosts=True,
         ).sanitized()
         store = CrawlStore()
         policy = RobotsTxtPolicy(config.user_agent)
-        import httpx
-
         async def _run():
-            async with httpx.AsyncClient() as client:
+            async with _mock_crawler_client() as client:
                 report, pages, failures = await a_crawl(config, store, policy, client)
                 return report, pages, failures
 
@@ -312,14 +298,11 @@ class TestScheduler:
             seed_urls=(f"{base}/",),
             delay_seconds=0,
             max_pages=20,
-            allow_private_hosts=True,
         ).sanitized()
         store = CrawlStore()
         policy = RobotsTxtPolicy(config.user_agent)
-        import httpx
-
         async def _run():
-            async with httpx.AsyncClient() as client:
+            async with _mock_crawler_client() as client:
                 await a_crawl(config, store, policy, client)
                 await a_crawl(config, store, policy, client)
 
@@ -342,7 +325,6 @@ class TestCrawlManager:
             delay_seconds=0,
             max_pages=6,
             max_depth=1,
-            allow_private_hosts=True,
         )
         job = manager.start_job(config)
         deadline = time.monotonic() + 30
@@ -372,7 +354,6 @@ class TestCrawlAPI:
             "max_pages": 5,
             "max_depth": 1,
             "delay_seconds": 0,
-            "allow_private_hosts": True,
         }
         r = client.post("/api/crawl", json=body)
         assert r.status_code == 201, r.text
@@ -420,7 +401,6 @@ class TestCrawlAPI:
                 "max_pages": 5,
                 "max_depth": 1,
                 "delay_seconds": 0,
-                "allow_private_hosts": True,
             },
         )
         job_id = r.json()["job_id"]
