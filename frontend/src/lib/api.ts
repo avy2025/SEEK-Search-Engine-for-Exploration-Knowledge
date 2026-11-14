@@ -8,7 +8,7 @@
  * (Docker).
  */
 
-import { DEFAULT_SEARCH_MODE, type SearchMode } from './modes';
+import { DEFAULT_SEARCH_MODE, type AppSearchMode, type SearchMode } from './modes';
 import type { ReaderPage } from './browserState';
 
 export interface HealthStatus {
@@ -188,6 +188,25 @@ export interface CrawlRequest {
   respect_robots: boolean;
 }
 
+export interface SearchHistoryEntry {
+  id: string;
+  query: string;
+  mode: AppSearchMode;
+  status: 'completed';
+  created_at: string;
+}
+
+export interface SearchHistoryPage {
+  items: SearchHistoryEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SearchHistoryClearResult {
+  deleted_count: number;
+}
+
 const DEFAULT_API_BASE_URL = 'http://localhost:8000';
 
 function resolveBaseUrl(): string {
@@ -208,7 +227,7 @@ async function probe(base: string, path: string, init?: RequestInit): Promise<Re
   return res;
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+async function request(path: string, init?: RequestInit): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(`${apiBaseUrl}${path}`, init);
@@ -231,7 +250,16 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(`Request to ${path} failed with status ${response.status}${detail}`);
   }
+  return response;
+}
+
+async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await request(path, init);
   return (await response.json()) as T;
+}
+
+async function requestNoContent(path: string, init?: RequestInit): Promise<void> {
+  await request(path, init);
 }
 
 export async function fetchHealth(): Promise<HealthStatus> {
@@ -392,6 +420,42 @@ export async function aiAnswer(query: string): Promise<AIAnswerResponse> {
 
 export function fetchAIAnswerUsage(): Promise<AIAnswerUsage> {
   return requestJson<AIAnswerUsage>('/api/ai-answer/usage');
+}
+
+export function recordSearchHistory(
+  query: string,
+  mode: AppSearchMode,
+  requestId: string,
+): Promise<SearchHistoryEntry> {
+  return requestJson<SearchHistoryEntry>('/api/history', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, mode, request_id: requestId }),
+  });
+}
+
+export function fetchSearchHistory(
+  limit: number,
+  offset: number,
+  mode?: AppSearchMode,
+): Promise<SearchHistoryPage> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (mode) params.set('mode', mode);
+  return requestJson<SearchHistoryPage>(`/api/history?${params.toString()}`);
+}
+
+export function fetchSearchHistoryEntry(id: string): Promise<SearchHistoryEntry> {
+  return requestJson<SearchHistoryEntry>(`/api/history/${encodeURIComponent(id)}`);
+}
+
+export function deleteSearchHistoryEntry(id: string): Promise<void> {
+  return requestNoContent(`/api/history/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export function clearSearchHistory(): Promise<SearchHistoryClearResult> {
+  return requestJson<SearchHistoryClearResult>('/api/history', { method: 'DELETE' });
 }
 
 export function fetchReaderPage(url: string, signal?: AbortSignal): Promise<ReaderPage> {

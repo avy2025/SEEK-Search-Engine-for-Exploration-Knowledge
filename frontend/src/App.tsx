@@ -9,6 +9,7 @@ import LiveSearchFilters from './components/LiveSearchFilters';
 import LiveSearchResults, { LiveSearchBudget } from './components/LiveSearchResults';
 import AIAnswerPanel from './components/AIAnswerPanel';
 import BrowserPanel from './components/BrowserPanel';
+import SearchHistoryPanel from './components/SearchHistoryPanel';
 import { browserReducer, createBrowserPage, initialBrowserState } from './lib/browserState';
 import type { BackendStatus } from './components/HealthBadge';
 import {
@@ -21,6 +22,7 @@ import {
   fetchLiveSearchUsage,
   liveSearch,
   LiveSearchError,
+  recordSearchHistory,
   search,
   type AIAnswerResponse,
   type AIAnswerUsage,
@@ -61,8 +63,25 @@ export const App: React.FC = () => {
   const [aiUsageError, setAIUsageError] = useState<string | null>(null);
   const [backendStatus, setBackendStatus] = useState<BackendStatus>('checking');
   const [adminOpen, setAdminOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyRefreshToken, setHistoryRefreshToken] = useState(0);
+  const [historyWriteError, setHistoryWriteError] = useState<string | null>(null);
   const [browserState, dispatchBrowser] = useReducer(browserReducer, initialBrowserState);
   const [mobilePane, setMobilePane] = useState<'results' | 'browser'>('results');
+
+  const saveSearchHistory = useCallback(async (q: string, searchMode: AppSearchMode) => {
+    try {
+      await recordSearchHistory(q, searchMode, crypto.randomUUID());
+      setHistoryWriteError(null);
+      setHistoryRefreshToken((token) => token + 1);
+    } catch (historyError) {
+      setHistoryWriteError(
+        historyError instanceof Error
+          ? historyError.message
+          : 'Search completed, but could not be saved to history.',
+      );
+    }
+  }, []);
 
   const refreshLiveUsage = useCallback(async () => {
     try {
@@ -109,7 +128,11 @@ export const App: React.FC = () => {
     if (mode === 'ai') void refreshAIUsage();
   }, [mode, refreshAIUsage]);
 
-  const runSearch = useCallback(async (q: string, searchMode: AppSearchMode) => {
+  const runSearch = useCallback(async (
+    q: string,
+    searchMode: AppSearchMode,
+    recordHistory = true,
+  ) => {
     dispatchBrowser({ type: 'close' });
     setMobilePane('results');
     setActiveQuery(q);
@@ -136,6 +159,7 @@ export const App: React.FC = () => {
         setResults(await search(q, { mode: searchMode }));
       }
       setView('results');
+      if (recordHistory) void saveSearchHistory(q, searchMode);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The search request failed.');
       setErrorCode(err instanceof LiveSearchError ? err.code : null);
@@ -144,15 +168,17 @@ export const App: React.FC = () => {
       if (searchMode === 'live') void refreshLiveUsage();
       if (searchMode === 'ai') void refreshAIUsage();
     }
-  }, [excludeDomains, includeDomains, refreshAIUsage, refreshLiveUsage]);
+  }, [excludeDomains, includeDomains, refreshAIUsage, refreshLiveUsage, saveSearchHistory]);
 
   /** Submit a query in the currently selected mode and record it in history. */
   const handleSearch = useCallback(
-    (q: string) => {
+    (q: string, requestedMode: AppSearchMode = mode) => {
       const trimmed = q.trim();
       if (!trimmed) return;
-      window.history.pushState({}, '', buildSearchPath({ query: trimmed, mode }));
-      void runSearch(trimmed, mode);
+      setQuery(trimmed);
+      setMode(requestedMode);
+      window.history.pushState({}, '', buildSearchPath({ query: trimmed, mode: requestedMode }));
+      void runSearch(trimmed, requestedMode);
     },
     [mode, runSearch],
   );
@@ -185,6 +211,7 @@ export const App: React.FC = () => {
     setError(null);
     setErrorCode(null);
     setView('landing');
+    setHistoryOpen(false);
     // Home keeps the selected mode in the URL so the landing page remembers it.
     window.history.pushState({}, '', buildSearchPath({ query: '', mode }));
   }, [mode]);
@@ -201,7 +228,7 @@ export const App: React.FC = () => {
     const { query: urlQuery, mode: urlMode } = initial.current;
     if (urlQuery && !didInitialSearch.current) {
       didInitialSearch.current = true;
-      void runSearch(urlQuery, urlMode);
+      void runSearch(urlQuery, urlMode, false);
     }
   }, [runSearch]);
 
@@ -212,7 +239,7 @@ export const App: React.FC = () => {
       setQuery(next.query);
       setMode(next.mode);
       if (next.query) {
-        void runSearch(next.query, next.mode);
+        void runSearch(next.query, next.mode, false);
       } else {
         setResults(null);
         setError(null);
@@ -298,11 +325,34 @@ export const App: React.FC = () => {
 
   return (
     <div className="flex min-h-screen flex-col bg-seek-dark text-seek-ink antialiased">
-      <Header backendStatus={backendStatus} onHome={goHome} />
+      <Header
+        backendStatus={backendStatus}
+        onHome={goHome}
+        historyOpen={historyOpen}
+        onHistory={() => setHistoryOpen((open) => !open)}
+      />
+      <SearchHistoryPanel
+        open={historyOpen}
+        refreshToken={historyRefreshToken}
+        writeError={historyWriteError}
+        onClose={() => setHistoryOpen(false)}
+        onRestore={(historyQuery, historyMode) => {
+          setHistoryOpen(false);
+          handleSearch(historyQuery, historyMode);
+        }}
+      />
 
       <main className={`mx-auto flex w-full flex-1 flex-col px-5 py-8 sm:px-8 ${
         browserState.open ? 'max-w-[100rem]' : 'max-w-5xl'
       }`}>
+        {historyWriteError && (
+          <p
+            role="alert"
+            className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+          >
+            Search completed, but history could not be saved. {historyWriteError}
+          </p>
+        )}
         <div className="mb-5 flex justify-end">
           <button
             type="button"

@@ -13,7 +13,8 @@
     "test:live-search": "node --no-warnings --experimental-strip-types tests/liveSearch.test.mjs",
     "test:ai-answer": "node --no-warnings --experimental-strip-types tests/aiAnswer.test.mjs",
     "test:browser": "node --no-warnings --experimental-strip-types tests/browserState.test.mjs",
-    "test:frontend": "npm run --silent test:urlstate && npm run --silent test:modes && npm run --silent test:live-search && npm run --silent test:ai-answer && npm run --silent test:browser"
+    "test:history": "node --no-warnings --experimental-strip-types tests/history.test.mjs",
+    "test:frontend": "npm run --silent test:urlstate && npm run --silent test:modes && npm run --silent test:live-search && npm run --silent test:ai-answer && npm run --silent test:browser && npm run --silent test:history"
   },
   "dependencies": {
     "lucide-react": "^0.344.0",
