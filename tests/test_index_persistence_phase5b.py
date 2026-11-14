@@ -37,7 +37,7 @@ from backend.search.index_manager import (
 )
 
 _DB_URL_OVERRIDE = "SEEK_TEST_DATABASE_URL"
-_DEFAULT_DB_URL = "postgresql+psycopg2://seek:seek@localhost:5432/seek"
+_DEFAULT_DB_URL = "postgresql+psycopg2://localhost:5432/seek"
 _SKIP_REASON = "PostgreSQL unreachable; skipping Phase 5B persistence test"
 
 

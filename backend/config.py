@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # --- Phase 1 Persistence (PostgreSQL) ---
-    DATABASE_URL: str = "postgresql+psycopg2://seek:seek@db:5432/seek"
+    DATABASE_URL: str = "postgresql+psycopg2://localhost:5432/seek"
 
     # --- Phase 2 Search MVP ---
     SAMPLE_CORPUS_DIR: str = "data/sample_corpus"
@@ -116,7 +116,6 @@ class Settings(BaseSettings):
     CRAWLER_MAX_CONTENT_CHARS: int = 200_000
     CRAWLER_USER_AGENT: str = "SEEK-Crawler/1.0 (+http://localhost:3000/bot-info)"
     CRAWLER_RESPECT_ROBOTS: bool = True
-    CRAWLER_BLOCK_PRIVATE_HOSTS: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -47,7 +47,7 @@ from backend.search.semantic import (
 )
 
 _DB_URL_OVERRIDE = "SEEK_TEST_DATABASE_URL"
-_DEFAULT_DB_URL = "postgresql+psycopg2://seek:seek@localhost:5432/seek"
+_DEFAULT_DB_URL = "postgresql+psycopg2://localhost:5432/seek"
 _SKIP_REASON = "PostgreSQL unreachable; skipping live Phase 6 semantic test"
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
