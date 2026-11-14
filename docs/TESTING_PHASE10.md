@@ -513,11 +513,10 @@ repository's `indexes/` tree. Tests that need a specific index state pin it with
 * **No model downloads.** The semantic stack is exercised with fakes. Tests that
   would need a real model are not part of the default gate.
 * **No PostgreSQL required.** Tests needing a live database read
-  `SEEK_TEST_DATABASE_URL` (default
-  `postgresql+psycopg2://seek:seek@localhost:5432/seek`) and `skip` when the
-  database is unreachable. The suite is fully green without one.
-* **No outbound HTTP.** The crawler suite uses an in-process `http.server`
-  fixture; everything else uses repository doubles.
+  `SEEK_TEST_DATABASE_URL` (default `postgresql+psycopg2://localhost:5432/seek`)
+  and skip when the database is unreachable. The suite is fully green without one.
+* **No outbound HTTP.** Crawler and Reader Mode tests use mocked HTTP transports;
+  everything else uses repository doubles.
 * **No network for node.** `TestFrontendSuites` skips cleanly when `node` or
   `npm` is absent, so a Python-only environment still passes.
 * **No `pytest-asyncio`.** Async paths are driven with `asyncio.run(...)`.
@@ -541,7 +540,7 @@ small, local, and directly justified by a failing test.
 | `backend/search/faiss_store.py` | Same two gaps as the BM25 store. | Broadened except tuples; metadata version now validated. |
 | `backend/api/search.py` | A raising `get_semantic_index_manager()` made `mode=semantic` and `mode=hybrid` return **HTTP 500** instead of the documented structured unavailability. | Added `_semantic_status()`, used by `_hybrid_search`, `_semantic_search` and `_lexical_search`. |
 | `backend/api/crawl.py` | A blank-seed list reached `CrawlManager.start_job` and raised `ValueError` → **HTTP 500**. | Sanitize the config and return HTTP 422 when no non-blank seed survives. |
-| `backend/crawler/scheduler.py` | Seed URLs were validated with `is_dangerous_url` only, so a private/loopback or binary-extension seed was accepted even though the same URL would be rejected as a discovered link. | Apply `is_crawlable_url(..., allow_private_hosts=...)` to seeds too; drop the now-unused import. |
+| `backend/crawler/scheduler.py` | Seed URLs were validated with `is_dangerous_url` only, so a private/loopback or binary-extension seed was accepted even though the same URL would be rejected as a discovered link. | Apply the same strict crawlability gate to seeds and discovered links. |
 | `scripts/probe_phase2.py` | The phase acceptance gate only proved the modules *import*, not that the index *searches*. | The probe now also builds the pipeline and runs one query, printing `search_ok` and `documents`. |
 
 ---

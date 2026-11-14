@@ -31,6 +31,7 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 ## 🚦 Current Project Status
 
 - **Phases 1–14 and Phase 15.1**: **IMPLEMENTED** — Foundation · Search MVP · Search UI · Controlled Crawler · Persistent Indexing · Semantic Search · Hybrid Ranking · Local RAG · Specialized Modes · Automated Tests · Docker Hardening · Tavily Live Search · Tavily + Gemini AI Answers · Integrated Browser · Persistent Search History.
+- **Phase 16**: QA and security hardening completed; see [`docs/PHASE_16_QA_REPORT.md`](docs/PHASE_16_QA_REPORT.md). This audit is not a production-readiness certification.
 - **Phase 12**: Tavily live internet search is implemented as an optional independent provider; local BM25, FAISS, hybrid retrieval, crawling, PostgreSQL and RAG remain available.
 - **Phase 13**: The AI Answers UI now researches with Tavily Basic Search and generates citation-validated responses with Gemini's verified free-tier model. Existing indexed RAG APIs remain available.
 - **Remaining roadmap**: Remaining Phase 15 milestones, expanded search evaluation and operational durability work.
@@ -42,7 +43,7 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## ✅ PHASE 1 COMPLETE FEATURES
 
-The current codebase establishes a production-grade full-stack foundation:
+The current codebase establishes a modular full-stack foundation:
 
 1. **FastAPI Backend Core**:
    - Asynchronous Python REST API framework using FastAPI and Uvicorn.
@@ -162,7 +163,9 @@ endpoint:
    - `robots.txt` parsing (`urllib.robotparser`) with per-host caching,
      `Crawl-delay` enforcement, and HTTP 401/403 → block-all semantics.
    - Dangerous URLs rejected (`javascript:`, `data:`, `ftp:`, credentials,
-     `localhost`/private IPs by default, binary/PDF paths, `mailto:`, `tel:`).
+     localhost/private/reserved IPs, nonstandard ports, binary/PDF paths,
+     `mailto:`, `tel:`). DNS answers are validated and pinned on every
+     connection; each redirect is validated before following it.
 
 3. **Extraction & Chunking** (`backend/crawler/extract.py`):
    - BeautifulSoup: main-text extraction (strips `nav`/`script`/`style`/
@@ -746,6 +749,11 @@ fallback; semantic rebuild requires the persistent document source.
    ```bash
    cp .env.example .env
    ```
+   Before starting Compose, set `POSTGRES_USER`, `POSTGRES_DB` and a unique
+   `POSTGRES_PASSWORD` in `.env` (for example, generate one with
+   `openssl rand -hex 32`). Compose refuses empty credentials. PostgreSQL is
+   reachable only on the private Compose network and is not published on a
+   host port.
 
 2. **Start Complete Stack**:
    ```bash
@@ -785,15 +793,19 @@ python -m pytest -q
 python -m scripts.probe_phase2
 
 # Run FastAPI backend with Uvicorn
-python backend/main.py
+# PostgreSQL is recommended for canonical document persistence. SQLite also
+# supports local history/development workflows:
+export APP_ENV=development
+export DATABASE_URL=sqlite:////tmp/seek-local.sqlite3
+python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 #### Frontend Setup
 ```bash
 cd frontend
 
-# Install Node dependencies
-npm install
+# Install the locked Node dependency tree
+npm ci
 
 # Start Vite dev server
 npm run dev
@@ -805,6 +817,7 @@ npm run typecheck
 npm run build
 ```
 
+The Vite 8 development toolchain requires Node 20.19+ or 22.12+.
 The frontend suites use Node's built-in `node:test` runner — no extra test
 framework is required. `npm run test:frontend` runs `test:urlstate`,
 `test:modes`, and `test:live-search`; the same scripts are invoked from `tests/test_regression_phase10.py`
@@ -895,21 +908,28 @@ The UI creates one history record after a successful, user-initiated search.
 Failed searches, automatic URL/deep-link loads and browser back/forward
 navigation do not create records. A saved entry contains only its UUID, query,
 mode, `completed` status and timestamp—never provider responses, credentials or
-search-result content. The feature follows SEEK's current single-user
-deployment model and does not add authentication or paid services.
+search-result content. The feature remains account-free: the backend creates
+an anonymous browser identity, with no registration, username, password or
+login page. Each browser session can see and manage only its own history.
 
 ### API
 
 - `POST /api/history` — record a completed search with
   `{"query":"...","mode":"web","request_id":"<uuid>"}`. The request ID makes
-  fallback retries idempotent. Queries are trimmed and limited to 500
-  characters; accepted modes are `web`, `ai`, `research`, `code` and `live`.
+  fallback retries idempotent. A browser-session cookie is required; the owner
+  is resolved server-side and cannot be selected in the request. Queries are
+  trimmed and limited to 500 characters; accepted modes are `web`, `ai`,
+  `research`, `code` and `live`.
 - `GET /api/history?limit=20&offset=0&mode=web` — list newest-first, with
   `limit` capped at 100 and optional mode filtering. The response includes
   `items`, `total`, `limit` and `offset`.
 - `GET /api/history/{id}` — retrieve one entry.
 - `DELETE /api/history/{id}` — remove one entry.
 - `DELETE /api/history` — clear history and return the deleted count.
+- `POST /api/session` — bootstrap or renew the anonymous browser session. Its
+  random token is HTTP-only, scoped to `/api`, SameSite=Lax, and Secure outside
+  development/test environments. Only a token hash and server-side expiry are
+  stored. History writes also require a trusted Origin.
 
 The endpoints are also described in the interactive OpenAPI documents at
 `/docs` and `/redoc`. Database failures return HTTP 503 with a generic history
@@ -919,11 +939,11 @@ error; internal database details are logged server-side, not returned.
 
 Search history uses the existing PostgreSQL database and Compose's existing
 persistent `postgres_data` volume; it does not create another database. The
-`search_history` table has a UUID primary key, query/mode/status/timestamp
-columns, mode constraints, and indexes for newest-first and mode-filtered
-listing. The app's existing SQLAlchemy table-creation path ensures the additive
-table exists at startup. The versioned Alembic migration is idempotent and can
-also be applied explicitly:
+`search_history` table has an owner foreign key and indexes for owner/newest-
+first and mode-filtered listing. Alembic migrations run automatically during
+backend startup and can also be applied explicitly. Existing history rows have
+no trustworthy owner, so the ownership migration assigns them to an expired,
+inaccessible quarantine session rather than exposing them to a new browser:
 
 ```bash
 # DATABASE_URL must point to the existing SEEK PostgreSQL database.
@@ -935,9 +955,11 @@ docker compose exec backend alembic upgrade head
 
 `docker compose down` preserves the named PostgreSQL volume; do not use
 `docker compose down -v` if the history should survive container recreation.
-The application database is PostgreSQL (SQLite files used by Tavily/Gemini
-usage ledgers are separate from it). Automated history persistence and
-concurrency tests use temporary SQLite databases and make no external requests.
+The application database is PostgreSQL in Compose; SQLite URLs are supported
+for local development and history but do not validate PostgreSQL behavior.
+Tavily/Gemini usage ledgers use their own SQLite files. Automated history
+persistence and concurrency tests use temporary SQLite databases and make no
+external requests.
 
 ### Verify locally
 
@@ -948,6 +970,19 @@ frontend using the Phase 14 local instructions. Run the focused checks:
 python -m pytest -q tests/test_search_history.py
 cd frontend && npm run test:history && npm run typecheck && npm run build
 ```
+
+---
+
+## Phase 16 — QA and security hardening
+
+The audit hardened crawler SSRF protections, isolated history by anonymous
+browser session, removed default PostgreSQL credentials and host-port exposure,
+and updated vulnerable frontend and HTML-parsing dependencies. The reproducible
+test results, mocked performance measurements, security findings, deployment
+checks and limitations are documented in
+[`docs/PHASE_16_QA_REPORT.md`](docs/PHASE_16_QA_REPORT.md). Docker and
+PostgreSQL runtime verification were not available during that audit; do not
+interpret passing tests as production readiness.
 
 ---
 
