@@ -207,7 +207,15 @@ export interface SearchHistoryClearResult {
   deleted_count: number;
 }
 
+class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
 const DEFAULT_API_BASE_URL = 'http://localhost:8000';
+let browserSessionReady: Promise<void> | null = null;
 
 function resolveBaseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;
@@ -248,7 +256,10 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
     } catch {
       // The response may not contain JSON; the HTTP status is still actionable.
     }
-    throw new Error(`Request to ${path} failed with status ${response.status}${detail}`);
+    throw new ApiRequestError(
+      `Request to ${path} failed with status ${response.status}${detail}`,
+      response.status,
+    );
   }
   return response;
 }
@@ -422,16 +433,44 @@ export function fetchAIAnswerUsage(): Promise<AIAnswerUsage> {
   return requestJson<AIAnswerUsage>('/api/ai-answer/usage');
 }
 
+async function ensureBrowserSession(): Promise<void> {
+  if (!browserSessionReady) {
+    browserSessionReady = requestJson<{ ready: boolean }>('/api/session', {
+      method: 'POST',
+      credentials: 'include',
+    })
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        browserSessionReady = null;
+        throw error;
+      });
+  }
+  await browserSessionReady;
+}
+
+async function withBrowserSession<T>(operation: () => Promise<T>): Promise<T> {
+  await ensureBrowserSession();
+  try {
+    return await operation();
+  } catch (error) {
+    if (!(error instanceof ApiRequestError) || error.status !== 401) throw error;
+    browserSessionReady = null;
+    await ensureBrowserSession();
+    return operation();
+  }
+}
+
 export function recordSearchHistory(
   query: string,
   mode: AppSearchMode,
   requestId: string,
 ): Promise<SearchHistoryEntry> {
-  return requestJson<SearchHistoryEntry>('/api/history', {
+  return withBrowserSession(() => requestJson<SearchHistoryEntry>('/api/history', {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, mode, request_id: requestId }),
-  });
+  }));
 }
 
 export function fetchSearchHistory(
@@ -441,21 +480,31 @@ export function fetchSearchHistory(
 ): Promise<SearchHistoryPage> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (mode) params.set('mode', mode);
-  return requestJson<SearchHistoryPage>(`/api/history?${params.toString()}`);
+  return withBrowserSession(() => requestJson<SearchHistoryPage>(
+    `/api/history?${params.toString()}`,
+    { credentials: 'include' },
+  ));
 }
 
 export function fetchSearchHistoryEntry(id: string): Promise<SearchHistoryEntry> {
-  return requestJson<SearchHistoryEntry>(`/api/history/${encodeURIComponent(id)}`);
+  return withBrowserSession(() => requestJson<SearchHistoryEntry>(
+    `/api/history/${encodeURIComponent(id)}`,
+    { credentials: 'include' },
+  ));
 }
 
 export function deleteSearchHistoryEntry(id: string): Promise<void> {
-  return requestNoContent(`/api/history/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  });
+  return withBrowserSession(() => requestNoContent(
+    `/api/history/${encodeURIComponent(id)}`,
+    { method: 'DELETE', credentials: 'include' },
+  ));
 }
 
 export function clearSearchHistory(): Promise<SearchHistoryClearResult> {
-  return requestJson<SearchHistoryClearResult>('/api/history', { method: 'DELETE' });
+  return withBrowserSession(() => requestJson<SearchHistoryClearResult>(
+    '/api/history',
+    { method: 'DELETE', credentials: 'include' },
+  ));
 }
 
 export function fetchReaderPage(url: string, signal?: AbortSignal): Promise<ReaderPage> {

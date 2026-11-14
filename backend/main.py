@@ -1,10 +1,33 @@
 from contextlib import asynccontextmanager
+import logging
+from pathlib import Path
 
-from fastapi import FastAPI
+from alembic import command
+from alembic.config import Config
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import SQLAlchemyError
+
 from backend.config import settings
 from backend.api.router import api_router
 from backend.search.index_manager import get_index_manager
+
+logger = logging.getLogger("seek.startup")
+
+
+def _run_database_migrations() -> None:
+    config = Config()
+    config.set_main_option(
+        "script_location",
+        str(Path(__file__).resolve().parent / "db" / "migrations"),
+    )
+    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
+    try:
+        command.upgrade(config, "head")
+    except SQLAlchemyError:
+        logger.exception(
+            "Database migrations could not run; database-backed APIs may be unavailable."
+        )
 
 
 @asynccontextmanager
@@ -30,6 +53,7 @@ async def lifespan(app: FastAPI):
         reset_semantic_index_manager,
     )
 
+    _run_database_migrations()
     reset_index_manager()
     manager = get_index_manager()
     state = manager.load_on_startup()
@@ -65,8 +89,11 @@ app = FastAPI(
 
 # Configure CORS
 origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
-if "*" not in origins:
-    origins.extend(["http://localhost:3000", "http://127.0.0.1:3000"])
+if "*" in origins:
+    raise ValueError(
+        "CORS_ORIGINS must list explicit trusted origins when credentials are enabled."
+    )
+origins.extend(["http://localhost:3000", "http://127.0.0.1:3000"])
 
 app.add_middleware(
     CORSMiddleware,
@@ -75,6 +102,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def disable_history_caching(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/api/session" or request.url.path.startswith("/api/history"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 app.include_router(api_router)
 

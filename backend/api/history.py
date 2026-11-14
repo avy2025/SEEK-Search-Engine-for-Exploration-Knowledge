@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Callable, Literal, Optional, TypeVar
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from backend.db.history import (
@@ -15,6 +15,11 @@ from backend.db.history import (
     get_history_repository,
 )
 from backend.db.models import SearchHistory
+from backend.api.session import (
+    require_allowed_browser_origin,
+    require_browser_session,
+)
+from backend.db.models import BrowserSession
 
 HistoryMode = Literal["web", "ai", "research", "code", "live"]
 T = TypeVar("T")
@@ -77,11 +82,19 @@ def _run(operation: Callable[[SearchHistoryRepository], T]) -> T:
 
 
 @router.post("", response_model=SearchHistoryEntry, status_code=status.HTTP_201_CREATED)
-def record_search(request: SearchHistoryCreate) -> SearchHistoryEntry:
+def record_search(
+    payload: SearchHistoryCreate,
+    request: Request,
+    browser_session: BrowserSession = Depends(require_browser_session),
+) -> SearchHistoryEntry:
+    require_allowed_browser_origin(request)
     try:
         entry = _run(
             lambda repository: repository.create(
-                request.query, request.mode, str(request.request_id)
+                payload.query,
+                payload.mode,
+                str(payload.request_id),
+                owner_session_id=browser_session.id,
             )
         )
     except HistoryIdempotencyConflict as exc:
@@ -94,12 +107,18 @@ def record_search(request: SearchHistoryCreate) -> SearchHistoryEntry:
 
 @router.get("", response_model=SearchHistoryPage)
 def list_search_history(
+    browser_session: BrowserSession = Depends(require_browser_session),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=1_000_000),
     mode: Optional[HistoryMode] = Query(default=None),
 ) -> SearchHistoryPage:
     entries, total = _run(
-        lambda repository: repository.list(limit=limit, offset=offset, mode=mode)
+        lambda repository: repository.list(
+            browser_session.id,
+            limit=limit,
+            offset=offset,
+            mode=mode,
+        )
     )
     return SearchHistoryPage(
         items=[SearchHistoryEntry.from_model(entry) for entry in entries],
@@ -110,8 +129,16 @@ def list_search_history(
 
 
 @router.get("/{id}", response_model=SearchHistoryEntry)
-def get_search_history(id: UUID) -> SearchHistoryEntry:
-    entry = _run(lambda repository: repository.get(str(id)))
+def get_search_history(
+    id: UUID,
+    browser_session: BrowserSession = Depends(require_browser_session),
+) -> SearchHistoryEntry:
+    entry = _run(
+        lambda repository: repository.get(
+            str(id),
+            owner_session_id=browser_session.id,
+        )
+    )
     if entry is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -121,8 +148,18 @@ def get_search_history(id: UUID) -> SearchHistoryEntry:
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_search_history(id: UUID) -> None:
-    deleted = _run(lambda repository: repository.delete(str(id)))
+def delete_search_history(
+    id: UUID,
+    request: Request,
+    browser_session: BrowserSession = Depends(require_browser_session),
+) -> None:
+    require_allowed_browser_origin(request)
+    deleted = _run(
+        lambda repository: repository.delete(
+            str(id),
+            owner_session_id=browser_session.id,
+        )
+    )
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -131,7 +168,13 @@ def delete_search_history(id: UUID) -> None:
 
 
 @router.delete("", response_model=SearchHistoryClearResult)
-def clear_search_history() -> SearchHistoryClearResult:
+def clear_search_history(
+    request: Request,
+    browser_session: BrowserSession = Depends(require_browser_session),
+) -> SearchHistoryClearResult:
+    require_allowed_browser_origin(request)
     return SearchHistoryClearResult(
-        deleted_count=_run(lambda repository: repository.clear())
+        deleted_count=_run(
+            lambda repository: repository.clear(owner_session_id=browser_session.id)
+        )
     )

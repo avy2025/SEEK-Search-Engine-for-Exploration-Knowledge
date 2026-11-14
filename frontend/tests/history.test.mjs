@@ -18,6 +18,9 @@ test('history API client exposes recording, listing, retrieval and deletion', as
     assert.match(api, new RegExp(`function ${name}\\(`));
   }
   assert.match(api, /\/api\/history/);
+  assert.match(api, /\/api\/session/);
+  assert.match(api, /withBrowserSession/);
+  assert.match(api, /credentials: 'include'/);
   assert.match(api, /JSON\.stringify\(\{ query, mode, request_id: requestId \}\)/);
   assert.match(api, /encodeURIComponent\(id\)/);
   assert.match(api, /requestNoContent/);

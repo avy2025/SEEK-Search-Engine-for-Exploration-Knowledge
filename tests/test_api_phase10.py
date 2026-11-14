@@ -40,6 +40,7 @@ EXPECTED_PATHS = {
     "/api/ai-answer",
     "/api/ai-answer/usage",
     "/api/browser/read",
+    "/api/session",
     "/api/history",
     "/api/history/{id}",
     "/api/crawl",
@@ -418,7 +419,7 @@ class TestCrawlEndpointOffline:
 
         created = client.post(
             "/api/crawl",
-            json={"urls": ["https://example.com"], "max_pages": 1, "allow_private_hosts": True},
+            json={"urls": ["https://example.com"], "max_pages": 1},
         )
         assert created.status_code == 201
         payload = created.json()
@@ -438,7 +439,6 @@ class TestCrawlEndpointOffline:
             if body["status"] in {"completed", "failed"}:
                 break
             time.sleep(0.01)
-
         assert set(body) == {
             "job_id",
             "status",
@@ -463,6 +463,17 @@ class TestCrawlEndpointOffline:
         listing = client.get("/api/crawl").json()
         assert listing["total_jobs"] == 1
         assert listing["crawled_documents"] == 1
+
+    def test_private_host_bypass_is_rejected(self, client, stubbed_crawl):
+        response = client.post(
+            "/api/crawl",
+            json={
+                "urls": ["http://127.0.0.1/"],
+                "max_pages": 1,
+                "allow_private_hosts": True,
+            },
+        )
+        assert response.status_code == 422
 
     def test_include_crawled_false_is_honoured_by_the_job_config(self, client: TestClient):
         created = client.post(

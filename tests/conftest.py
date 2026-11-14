@@ -492,10 +492,12 @@ def semantic_missing(monkeypatch):
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(_isolated_search_history) -> TestClient:
     """``TestClient`` over the real app (lifespan is *not* run, so no artifact
     is loaded from disk and no index directory is written)."""
-    return TestClient(app)
+    test_client = TestClient(app, headers={"Origin": "http://localhost:3000"})
+    assert test_client.post("/api/session").status_code == 200
+    return test_client
 
 
 @pytest.fixture(autouse=True)
@@ -504,13 +506,21 @@ def _isolated_search_history(monkeypatch, tmp_path):
     from sqlalchemy import create_engine
 
     from backend.api import history as history_api
+    from backend.api import session as session_api
     from backend.db.history import SearchHistoryRepository
 
+    monkeypatch.setattr(session_api.settings, "APP_ENV", "testing")
+    monkeypatch.setattr(
+        session_api.settings,
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    )
     engine = create_engine(
         f"sqlite:///{tmp_path / 'search_history.sqlite3'}",
         connect_args={"check_same_thread": False},
     )
     repository = SearchHistoryRepository(engine=engine)
     monkeypatch.setattr(history_api, "get_history_repository", lambda: repository)
+    monkeypatch.setattr(session_api, "get_history_repository", lambda: repository)
     yield repository
     engine.dispose()

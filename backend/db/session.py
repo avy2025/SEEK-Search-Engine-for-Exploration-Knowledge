@@ -6,6 +6,7 @@ from typing import Iterator, Optional
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from backend.config import settings
@@ -15,19 +16,25 @@ logger = logging.getLogger("seek.db.session")
 
 
 def make_database_engine(database_url: Optional[str] = None) -> Engine:
-    """Create a SQLAlchemy engine for the configured PostgreSQL database.
+    """Create an engine for the configured PostgreSQL or local SQLite database.
 
     A short ``connect_timeout`` keeps app startup snappy and lets the rest of
     SEEK run purely from the in-memory BM25 index when Postgres is unavailable.
     """
     url = database_url or settings.DATABASE_URL
-    return create_engine(
-        url,
-        pool_pre_ping=True,
-        pool_size=5,
-        max_overflow=10,
-        connect_args={"connect_timeout": 6},
-    )
+    parsed_url = make_url(url)
+    options: dict[str, object] = {"pool_pre_ping": True}
+    if parsed_url.get_backend_name() == "sqlite":
+        options["connect_args"] = {"timeout": 6}
+        if parsed_url.database not in (None, "", ":memory:"):
+            options.update(pool_size=5, max_overflow=10)
+    else:
+        options.update(
+            pool_size=5,
+            max_overflow=10,
+            connect_args={"connect_timeout": 6},
+        )
+    return create_engine(url, **options)
 
 
 class Database:

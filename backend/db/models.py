@@ -18,6 +18,7 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Index,
     String,
     Text,
@@ -62,6 +63,28 @@ class Document(Base):
         return f"<Document id={self.document_id} title={self.title!r}>"
 
 
+class BrowserSession(Base):
+    """Server-side identity for an anonymous browser, keyed by a token hash."""
+
+    __tablename__ = "browser_sessions"
+    __table_args__ = (
+        Index("ix_browser_sessions_token_hash", "token_hash", unique=True),
+        Index("ix_browser_sessions_expires_at", "expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class SearchHistory(Base):
     """One completed user search, without provider responses or credentials."""
 
@@ -77,10 +100,16 @@ class SearchHistory(Base):
         ),
         Index("ix_search_history_created_at", "created_at"),
         Index("ix_search_history_mode_created_at", "mode", "created_at"),
+        Index("ix_search_history_owner_created_at", "owner_session_id", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    owner_session_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("browser_sessions.id", ondelete="CASCADE"),
+        nullable=False,
     )
     query: Mapped[str] = mapped_column(String(500), nullable=False)
     mode: Mapped[str] = mapped_column(String(16), nullable=False)
