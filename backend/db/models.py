@@ -1,20 +1,28 @@
-"""SQLAlchemy ORM model layer for SEEK (Phase 2).
+"""SQLAlchemy ORM model layer for SEEK.
 
 ``Base`` is the single regicle-registry metadata object shared by every table; it
 is defined **here** (``backend.db.models``) and imported by ``backend.db.session``
 so there is exactly one direction of dependency — ``session -> models`` — and no
 import cycle.
 
-Phase 2 keeps a deliberately thin ORM: one ``documents`` table whose rows map 1:1
-to committed corpus files (digest-deduplicated via ``content_hash``). Search
-authority stays in the in-memory BM25 index; Postgres is a durable cache.
+The ORM stores indexed documents and the minimal query metadata needed for the
+single-user search history. Search authority stays in the in-memory BM25 index.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
-from sqlalchemy import BigInteger, DateTime, Index, String, Text, func
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    Index,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -52,3 +60,36 @@ class Document(Base):
 
     def __repr__(self) -> str:  # pragma: no cover - trivial debug helper
         return f"<Document id={self.document_id} title={self.title!r}>"
+
+
+class SearchHistory(Base):
+    """One completed user search, without provider responses or credentials."""
+
+    __tablename__ = "search_history"
+    __table_args__ = (
+        CheckConstraint(
+            "mode IN ('web', 'ai', 'research', 'code', 'live')",
+            name="ck_search_history_mode",
+        ),
+        CheckConstraint(
+            "status = 'completed'",
+            name="ck_search_history_status",
+        ),
+        Index("ix_search_history_created_at", "created_at"),
+        Index("ix_search_history_mode_created_at", "mode", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid4())
+    )
+    query: Mapped[str] = mapped_column(String(500), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="completed", server_default="completed"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )

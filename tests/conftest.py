@@ -496,3 +496,21 @@ def client() -> TestClient:
     """``TestClient`` over the real app (lifespan is *not* run, so no artifact
     is loaded from disk and no index directory is written)."""
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_search_history(monkeypatch, tmp_path):
+    """Keep history API tests persistent within a test but independent offline."""
+    from sqlalchemy import create_engine
+
+    from backend.api import history as history_api
+    from backend.db.history import SearchHistoryRepository
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'search_history.sqlite3'}",
+        connect_args={"check_same_thread": False},
+    )
+    repository = SearchHistoryRepository(engine=engine)
+    monkeypatch.setattr(history_api, "get_history_repository", lambda: repository)
+    yield repository
+    engine.dispose()

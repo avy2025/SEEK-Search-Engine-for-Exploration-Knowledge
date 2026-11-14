@@ -76,6 +76,8 @@ EXPECTED_ROUTES: dict[str, set[str]] = {
     "/api/ai-answer": {"POST"},
     "/api/ai-answer/usage": {"GET"},
     "/api/browser/read": {"POST"},
+    "/api/history": {"GET", "POST", "DELETE"},
+    "/api/history/{id}": {"GET", "DELETE"},
     "/api/answer": {"POST"},
     "/api/crawl": {"GET", "POST"},
     "/api/crawl/{job_id}": {"GET"},

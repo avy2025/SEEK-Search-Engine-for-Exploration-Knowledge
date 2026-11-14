@@ -30,10 +30,10 @@ Unlike applications that simply wrap commercial search APIs (e.g. Google or Bing
 
 ## 🚦 Current Project Status
 
-- **Phases 1–13**: **IMPLEMENTED** — Foundation · Search MVP · Search UI · Controlled Crawler · Persistent Indexing · Semantic Search · Hybrid Ranking · Local RAG · Specialized Modes · Automated Tests · Docker Hardening · Tavily Live Search · Tavily + Gemini AI Answers.
+- **Phases 1–14 and Phase 15.1**: **IMPLEMENTED** — Foundation · Search MVP · Search UI · Controlled Crawler · Persistent Indexing · Semantic Search · Hybrid Ranking · Local RAG · Specialized Modes · Automated Tests · Docker Hardening · Tavily Live Search · Tavily + Gemini AI Answers · Integrated Browser · Persistent Search History.
 - **Phase 12**: Tavily live internet search is implemented as an optional independent provider; local BM25, FAISS, hybrid retrieval, crawling, PostgreSQL and RAG remain available.
 - **Phase 13**: The AI Answers UI now researches with Tavily Basic Search and generates citation-validated responses with Gemini's verified free-tier model. Existing indexed RAG APIs remain available.
-- **Remaining roadmap**: Expanded search evaluation and final documentation polish (Phase 14).
+- **Remaining roadmap**: Remaining Phase 15 milestones, expanded search evaluation and operational durability work.
 - **Operations UI**: The frontend includes a **Manage sources & indexing** panel for submitting crawl jobs, monitoring job counts, viewing index status, and refreshing or rebuilding the lexical index. Crawl-job history is in memory and does not survive backend restarts.
 - **Continuous integration**: GitHub Actions runs the backend suite, acceptance probe, frontend tests, typecheck, and production build on pushes and pull requests.
 - **Search evaluation**: Run `python scripts/evaluate_search.py` for an offline BM25 baseline against hand-judged queries in `tests/data/search_relevance.json`. The small sample set is a regression aid, not a representative industry benchmark.
@@ -633,7 +633,8 @@ Gemini quota errors are reported without retries or silent fallback.
 
 ### Remaining roadmap work
 
-- **Phase 14 — Evaluation and documentation polish**: expand/review relevance judgments; compare lexical, semantic, hybrid and specialized modes; measure latency and memory; complete setup/deployment guidance.
+- **Search evaluation**: expand/review relevance judgments; compare lexical, semantic, hybrid and specialized modes; measure latency and memory.
+- **Phase 15 follow-up milestones**: additional user-facing history capabilities are not included in Phase 15.1.
 - **Operational durability**: persist crawl-job state and support job recovery after backend restarts. Crawl jobs are currently process-local; this is not yet implemented.
 
 User accounts, personalization, multi-node sharding, and learning-to-rank are possible future directions, not currently committed roadmap deliverables.
@@ -646,13 +647,13 @@ User accounts, personalization, multi-node sharding, and learning-to-rank are po
 ┌──────────────────────────────────────────────────────────┐
 │ React + TypeScript + Vite UI (port 3000 / Nginx)         │
 │ Search bar · mode selector · results · answers · sources │
-│ Manage sources & indexing · health indicator             │
+│ Search history · Manage sources & indexing · health       │
 └──────────────────────────┬───────────────────────────────┘
                            │ HTTP / REST
                            ▼
 ┌──────────────────────────────────────────────────────────┐
 │ FastAPI application (port 8000 / Uvicorn)                 │
-│ health · search · answer · crawl jobs · index operations  │
+│ health · search · history · answer · crawl · index        │
 └───────────────┬──────────────────────────┬───────────────┘
                 │ search                   │ crawl / index
                 ▼                          ▼
@@ -672,7 +673,7 @@ User accounts, personalization, multi-node sharding, and learning-to-rank are po
                            │
                            ▼
 ┌──────────────────────────────────────────────────────────┐
-│ PostgreSQL document store (canonical persisted documents) │
+│ PostgreSQL document + search-history store                │
 │ Derived artifacts: indexes/bm25 and FAISS semantic index  │
 └──────────────────────────────────────────────────────────┘
 
@@ -688,6 +689,9 @@ Build / verification: GitHub Actions → pytest + acceptance probe
    explicit status rather than silently hidden.
 3. Results, source citations, and optional grounded answers are rendered by the
    UI. Search parameters remain shareable through the URL.
+   Successful user-initiated searches save only the query, mode, completion
+   status and timestamp to PostgreSQL. Automatic URL reload and browser
+   back/forward searches do not create duplicate history entries.
 4. An operator can start a crawl from **Manage sources & indexing**. The
    crawler respects configured scope and robots.txt rules, extracts and
    deduplicates pages, and persists documents best-effort; index operations
@@ -879,6 +883,74 @@ The reader tests use mocked responses and do not request external webpages.
 
 ---
 
+## Phase 15.1 — Persistent Search History
+
+SEEK's header includes a responsive Search History panel. Successful searches
+from Web Search, Research, Code Docs, Live Internet Search and AI Answers are
+saved newest-first and can be filtered by mode, revisited, individually deleted
+or cleared after confirmation. Restoring an entry re-runs its query through
+the selected mode's normal workflow; old result payloads are not reused.
+
+The UI creates one history record after a successful, user-initiated search.
+Failed searches, automatic URL/deep-link loads and browser back/forward
+navigation do not create records. A saved entry contains only its UUID, query,
+mode, `completed` status and timestamp—never provider responses, credentials or
+search-result content. The feature follows SEEK's current single-user
+deployment model and does not add authentication or paid services.
+
+### API
+
+- `POST /api/history` — record a completed search with
+  `{"query":"...","mode":"web","request_id":"<uuid>"}`. The request ID makes
+  fallback retries idempotent. Queries are trimmed and limited to 500
+  characters; accepted modes are `web`, `ai`, `research`, `code` and `live`.
+- `GET /api/history?limit=20&offset=0&mode=web` — list newest-first, with
+  `limit` capped at 100 and optional mode filtering. The response includes
+  `items`, `total`, `limit` and `offset`.
+- `GET /api/history/{id}` — retrieve one entry.
+- `DELETE /api/history/{id}` — remove one entry.
+- `DELETE /api/history` — clear history and return the deleted count.
+
+The endpoints are also described in the interactive OpenAPI documents at
+`/docs` and `/redoc`. Database failures return HTTP 503 with a generic history
+error; internal database details are logged server-side, not returned.
+
+### Database and migration
+
+Search history uses the existing PostgreSQL database and Compose's existing
+persistent `postgres_data` volume; it does not create another database. The
+`search_history` table has a UUID primary key, query/mode/status/timestamp
+columns, mode constraints, and indexes for newest-first and mode-filtered
+listing. The app's existing SQLAlchemy table-creation path ensures the additive
+table exists at startup. The versioned Alembic migration is idempotent and can
+also be applied explicitly:
+
+```bash
+# DATABASE_URL must point to the existing SEEK PostgreSQL database.
+alembic upgrade head
+
+# From a running Compose stack:
+docker compose exec backend alembic upgrade head
+```
+
+`docker compose down` preserves the named PostgreSQL volume; do not use
+`docker compose down -v` if the history should survive container recreation.
+The application database is PostgreSQL (SQLite files used by Tavily/Gemini
+usage ledgers are separate from it). Automated history persistence and
+concurrency tests use temporary SQLite databases and make no external requests.
+
+### Verify locally
+
+Start PostgreSQL with the normal Compose stack, then start the backend and
+frontend using the Phase 14 local instructions. Run the focused checks:
+
+```bash
+python -m pytest -q tests/test_search_history.py
+cd frontend && npm run test:history && npm run typecheck && npm run build
+```
+
+---
+
 ## 🧪 Health-Check & Acceptance Verification
 
 To verify that the Phase 1 backend service and health checks are functioning correctly:
@@ -1008,8 +1080,9 @@ To verify that the Phase 1 backend service and health checks are functioning cor
 
 ## 🔮 Next Planned Phase
 
-**Phase 14: Evaluation and Benchmarking** — expand search relevance judgments
-and measure latency, memory, and quality across representative datasets.
+**Remaining Phase 15 milestones and search evaluation** — build on the
+persistent history foundation, then expand relevance judgments and establish
+measured ranking, latency, and memory baselines across search modes.
 
 ---
 
