@@ -13,6 +13,7 @@ asyncio>=3.4.3
 
 # Content Parsing & Extraction
 beautifulsoup4>=4.12.0
+soupsieve>=4.0.0
 lxml>=5.1.0
 trafilatura>=1.8.0
 
