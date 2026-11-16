@@ -477,9 +477,11 @@ export function fetchSearchHistory(
   limit: number,
   offset: number,
   mode?: AppSearchMode,
+  query?: string,
 ): Promise<SearchHistoryPage> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (mode) params.set('mode', mode);
+  if (query?.trim()) params.set('q', query.trim());
   return withBrowserSession(() => requestJson<SearchHistoryPage>(
     `/api/history?${params.toString()}`,
     { credentials: 'include' },

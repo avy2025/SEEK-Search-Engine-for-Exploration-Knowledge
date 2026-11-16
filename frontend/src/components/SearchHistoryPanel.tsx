@@ -1,11 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Search, X } from 'lucide-react';
 import {
   clearSearchHistory,
   deleteSearchHistoryEntry,
   fetchSearchHistory,
   type SearchHistoryEntry,
 } from '../lib/api';
+import { groupSearchHistory } from '../lib/historyGroups';
 import { ALL_SEARCH_MODES, modeLabel, type AppSearchMode } from '../lib/modes';
 
 const PAGE_SIZE = 20;
@@ -29,12 +30,15 @@ export const SearchHistoryPanel: React.FC<SearchHistoryPanelProps> = ({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [modeFilter, setModeFilter] = useState<AppSearchMode | 'all'>('all');
+  const [searchFilter, setSearchFilter] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  const latestLoad = useRef(0);
 
   const loadHistory = useCallback(async () => {
+    const requestNumber = ++latestLoad.current;
     setLoading(true);
     setError(null);
     try {
@@ -42,22 +46,25 @@ export const SearchHistoryPanel: React.FC<SearchHistoryPanelProps> = ({
         PAGE_SIZE,
         page * PAGE_SIZE,
         modeFilter === 'all' ? undefined : modeFilter,
+        searchFilter,
       );
+      if (requestNumber !== latestLoad.current) return;
       setEntries(result.items);
       setTotal(result.total);
       if (page > 0 && result.items.length === 0 && result.total <= page * PAGE_SIZE) {
         setPage(Math.max(0, Math.ceil(result.total / PAGE_SIZE) - 1));
       }
     } catch (requestError) {
+      if (requestNumber !== latestLoad.current) return;
       setError(
         requestError instanceof Error
           ? requestError.message
           : 'Search history could not be loaded.',
       );
     } finally {
-      setLoading(false);
+      if (requestNumber === latestLoad.current) setLoading(false);
     }
-  }, [modeFilter, page]);
+  }, [modeFilter, page, searchFilter]);
 
   useEffect(() => {
     if (open) void loadHistory();
@@ -108,6 +115,7 @@ export const SearchHistoryPanel: React.FC<SearchHistoryPanelProps> = ({
   if (!open) return null;
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const groups = groupSearchHistory(entries);
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onMouseDown={onClose}>
@@ -139,32 +147,51 @@ export const SearchHistoryPanel: React.FC<SearchHistoryPanelProps> = ({
           </button>
         </header>
 
-        <div className="flex items-center justify-between gap-3 border-b border-seek-border px-5 py-4 sm:px-7">
-          <label className="flex min-w-0 items-center gap-2 text-sm text-gray-400">
-            <span className="shrink-0">Mode</span>
-            <select
-              value={modeFilter}
+        <div className="flex flex-col gap-3 border-b border-seek-border px-5 py-4 sm:px-7">
+          <label className="relative block">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+              aria-hidden="true"
+            />
+            <input
+              type="search"
+              value={searchFilter}
               onChange={(event) => {
-                setModeFilter(event.target.value as AppSearchMode | 'all');
+                setSearchFilter(event.target.value);
                 setPage(0);
               }}
-              className="min-w-0 rounded-md border border-seek-border bg-white px-2 py-1.5 text-sm text-seek-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
-              aria-label="Filter search history by mode"
-            >
-              <option value="all">All modes</option>
-              {ALL_SEARCH_MODES.map((searchMode) => (
-                <option key={searchMode} value={searchMode}>{modeLabel(searchMode)}</option>
-              ))}
-            </select>
+              placeholder="Search previous queries"
+              aria-label="Search history"
+              className="w-full rounded-md border border-seek-border bg-white py-2 pl-9 pr-3 text-sm text-seek-ink placeholder:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
+            />
           </label>
-          <button
-            type="button"
-            disabled={total === 0 || loading}
-            onClick={() => setConfirmClear(true)}
-            className="shrink-0 rounded-md px-2 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
-          >
-            Clear history
-          </button>
+          <div className="flex items-center justify-between gap-3">
+            <label className="flex min-w-0 items-center gap-2 text-sm text-gray-400">
+              <span className="shrink-0">Mode</span>
+              <select
+                value={modeFilter}
+                onChange={(event) => {
+                  setModeFilter(event.target.value as AppSearchMode | 'all');
+                  setPage(0);
+                }}
+                className="min-w-0 rounded-md border border-seek-border bg-white px-2 py-1.5 text-sm text-seek-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
+                aria-label="Filter search history by mode"
+              >
+                <option value="all">All modes</option>
+                {ALL_SEARCH_MODES.map((searchMode) => (
+                  <option key={searchMode} value={searchMode}>{modeLabel(searchMode)}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={total === 0 || loading}
+              onClick={() => setConfirmClear(true)}
+              className="shrink-0 rounded-md px-2 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
+            >
+              Clear history
+            </button>
+          </div>
         </div>
 
         {(writeError || error) && (
@@ -191,48 +218,61 @@ export const SearchHistoryPanel: React.FC<SearchHistoryPanelProps> = ({
           )}
           {!loading && !error && entries.length === 0 && (
             <div className="py-12 text-center">
-              <h3 className="font-medium text-seek-ink">No searches yet</h3>
+              <h3 className="font-medium text-seek-ink">
+                {searchFilter.trim() || modeFilter !== 'all'
+                  ? 'No matching searches'
+                  : 'No searches yet'}
+              </h3>
               <p className="mt-2 text-sm text-gray-400">
-                Searches you complete will appear here.
+                {searchFilter.trim() || modeFilter !== 'all'
+                  ? 'Try another query or mode filter.'
+                  : 'Searches you complete will appear here.'}
               </p>
             </div>
           )}
           {!loading && entries.length > 0 && (
-            <ul className="space-y-3">
-              {entries.map((entry) => (
-                <li
-                  key={entry.id}
-                  className="flex items-start gap-3 rounded-lg border border-seek-border bg-white p-3 sm:p-4"
-                >
-                  <button
-                    type="button"
-                    onClick={() => onRestore(entry.query, entry.mode)}
-                    className="min-w-0 flex-1 rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
-                    aria-label={`Run "${entry.query}" in ${modeLabel(entry.mode)}`}
-                  >
-                    <span className="block break-words font-medium text-seek-ink">{entry.query}</span>
-                    <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400">
-                      <span>{modeLabel(entry.mode)}</span>
-                      <span aria-hidden="true">·</span>
-                      <time dateTime={entry.created_at}>
-                        {new Date(entry.created_at).toLocaleString()}
-                      </time>
-                      <span aria-hidden="true">·</span>
-                      <span>{entry.status}</span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void removeEntry(entry.id)}
-                    disabled={pendingDelete === entry.id}
-                    aria-label={`Delete "${entry.query}" from history`}
-                    className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-gray-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
-                  >
-                    {pendingDelete === entry.id ? 'Deleting…' : 'Delete'}
-                  </button>
-                </li>
+            <div className="space-y-6">
+              {groups.map((group) => (
+                <section key={group.label} aria-label={group.label}>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    {group.label}
+                  </h3>
+                  <ul className="space-y-3">
+                    {group.entries.map((entry) => (
+                      <li
+                        key={entry.id}
+                        className="flex items-start gap-3 rounded-lg border border-seek-border bg-white p-3 sm:p-4"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => onRestore(entry.query, entry.mode)}
+                          className="min-w-0 flex-1 rounded text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
+                          aria-label={`Run "${entry.query}" in ${modeLabel(entry.mode)}`}
+                        >
+                          <span className="block break-words font-medium text-seek-ink">{entry.query}</span>
+                          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400">
+                            <span>{modeLabel(entry.mode)}</span>
+                            <span aria-hidden="true">·</span>
+                            <time dateTime={entry.created_at}>
+                              {new Date(entry.created_at).toLocaleString()}
+                            </time>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void removeEntry(entry.id)}
+                          disabled={pendingDelete === entry.id}
+                          aria-label={`Delete "${entry.query}" from history`}
+                          className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-gray-400 hover:bg-red-50 hover:text-red-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
+                        >
+                          {pendingDelete === entry.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           )}
         </div>
 

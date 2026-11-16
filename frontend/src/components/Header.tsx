@@ -39,8 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
         className="inline-flex items-center gap-2 rounded-lg border border-seek-border bg-white px-3 py-2 text-sm font-medium text-gray-300 transition hover:text-seek-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-seek-accent"
       >
         <History className="h-4 w-4" aria-hidden="true" />
-        <span className="hidden sm:inline">Search history</span>
-        <span className="sm:hidden">History</span>
+        <span>Search History</span>
       </button>
       <HealthBadge status={backendStatus} />
     </div>
