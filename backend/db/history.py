@@ -120,18 +120,28 @@ class SearchHistoryRepository:
         limit: int,
         offset: int,
         mode: Optional[str] = None,
+        query: Optional[str] = None,
     ) -> tuple[list[SearchHistory], int]:
         try:
             with self._session_factory() as session:
-                statement = select(SearchHistory).where(
-                    SearchHistory.owner_session_id == owner_session_id
-                )
-                count_statement = select(func.count()).select_from(SearchHistory).where(
-                    SearchHistory.owner_session_id == owner_session_id
-                )
+                filters = [SearchHistory.owner_session_id == owner_session_id]
                 if mode is not None:
-                    statement = statement.where(SearchHistory.mode == mode)
-                    count_statement = count_statement.where(SearchHistory.mode == mode)
+                    filters.append(SearchHistory.mode == mode)
+                if query:
+                    escaped_query = (
+                        query.replace("\\", "\\\\")
+                        .replace("%", "\\%")
+                        .replace("_", "\\_")
+                    )
+                    filters.append(
+                        SearchHistory.query.ilike(
+                            f"%{escaped_query}%", escape="\\"
+                        )
+                    )
+                statement = select(SearchHistory).where(*filters)
+                count_statement = (
+                    select(func.count()).select_from(SearchHistory).where(*filters)
+                )
                 entries = session.scalars(
                     statement.order_by(
                         SearchHistory.created_at.desc(), SearchHistory.id.desc()

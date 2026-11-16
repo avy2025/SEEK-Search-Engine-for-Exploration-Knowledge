@@ -82,6 +82,30 @@ def test_history_is_newest_first_and_supports_mode_filter_and_pagination(client)
     assert [entry["query"] for entry in later_page["items"]] == ["first web"]
 
 
+def test_history_text_filter_is_case_insensitive_literal_and_owner_scoped(client):
+    for query in ("SEEK History", "seek 100%_ready", "unrelated query"):
+        assert client.post(
+            "/api/history",
+            json={"query": query, "mode": "web", "request_id": str(uuid4())},
+        ).status_code == 201
+
+    filtered = client.get("/api/history", params={"q": "seek"}).json()
+    assert {entry["query"] for entry in filtered["items"]} == {
+        "SEEK History",
+        "seek 100%_ready",
+    }
+    assert filtered["total"] == 2
+
+    literal_wildcards = client.get("/api/history", params={"q": "100%_"}).json()
+    assert [entry["query"] for entry in literal_wildcards["items"]] == [
+        "seek 100%_ready"
+    ]
+
+    other_session = TestClient(app, headers={"Origin": "http://localhost:3000"})
+    assert other_session.post("/api/session").status_code == 200
+    assert other_session.get("/api/history", params={"q": "seek"}).json()["total"] == 0
+
+
 def test_get_delete_individual_and_clear_history(client):
     created = client.post(
         "/api/history",

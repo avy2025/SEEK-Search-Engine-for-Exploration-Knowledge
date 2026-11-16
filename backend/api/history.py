@@ -111,6 +111,7 @@ def list_search_history(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0, le=1_000_000),
     mode: Optional[HistoryMode] = Query(default=None),
+    q: Optional[str] = Query(default=None, max_length=500),
 ) -> SearchHistoryPage:
     entries, total = _run(
         lambda repository: repository.list(
@@ -118,6 +119,7 @@ def list_search_history(
             limit=limit,
             offset=offset,
             mode=mode,
+            query=q.strip() if q and q.strip() else None,
         )
     )
     return SearchHistoryPage(
