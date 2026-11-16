@@ -318,6 +318,63 @@ ones that span a phase boundary.
 > Phases 0–9; `python scripts/probe_phase2.py` verifies the Phase 2 acceptance
 > criteria (18/18 imports, app build, and one real end-to-end query).
 
+### 3.9 Anonymous Search History
+
+The Search History entry in the application header opens a responsive history
+panel. The frontend fetches owner-scoped entries from the FastAPI history API,
+shows newest searches first, groups them by the browser's local calendar date
+(Today, Yesterday, Previous 7 Days, then individual older dates), and supports
+query/mode filtering, rerunning, per-entry deletion, and confirmed clearing.
+Text filtering is a case-insensitive literal substring search; SQL wildcard
+characters in a query are escaped.
+
+History is tied to an anonymous browser session, not an account. `POST
+/api/session` sets the opaque `seek_browser_session` cookie (HTTP-only,
+SameSite=Lax, 30-day expiry); PostgreSQL stores only the token's SHA-256 hash in
+`browser_sessions`. The backend resolves the cookie to a server-side session
+and applies that session ID to every history read, write, delete, and clear.
+Write endpoints also enforce the configured browser Origin. History responses
+are marked `Cache-Control: no-store`; there is no login or external identity
+provider.
+
+**History event definition:** a history row is created only after a search has
+completed successfully. Submitting the search form or a sample query, choosing
+a new mode for an active query, or selecting a saved entry to run it again are
+explicit search actions and create a row for each successful execution. A
+successful explicit retry also counts as a new search. Initial URL execution
+(including refresh/deep-link load) and browser back/forward navigation rerun
+results without recording a row. The client supplies a fresh UUID per action;
+server-side idempotency makes retries of that same history write return the
+existing row rather than creating a duplicate.
+
+**History API:**
+
+| Method and path | Purpose |
+|---|---|
+| `POST /api/session` | Create or resume the anonymous browser session |
+| `POST /api/history` | Record a completed query and its mode (`web`, `live`, `ai`, `research`, or `code`); body: `{query, mode, request_id}` |
+| `GET /api/history` | List newest-first; supports `limit`, `offset`, `mode`, and text filter `q` |
+| `GET /api/history/{id}` | Read one entry belonging to the current session |
+| `DELETE /api/history/{id}` | Delete one entry belonging to the current session |
+| `DELETE /api/history` | Clear only the current session's entries; returns `deleted_count` |
+
+**Verification:** the targeted history tests exercise PostgreSQL-compatible
+SQLAlchemy persistence using isolated SQLite databases (the test suite does not
+require a live PostgreSQL server), chronological ordering, mode/query filters,
+deletion, clearing, idempotency, every supported mode, and cross-session
+isolation. Frontend tests cover date grouping, ordering, query/mode restoration,
+and history controls. Validation run for this feature:
+
+| Command | Result |
+|---|---|
+| `.venv/bin/python -m pytest -q tests/test_search_history.py` | **18 passed** |
+| `npm --prefix frontend run test:frontend` | **33 passed** across six frontend test modules |
+| `npm --prefix frontend run typecheck` | Passed |
+| `npm --prefix frontend run build` | Passed |
+
+These results use the repository's hermetic SQLite test fixtures; a live
+PostgreSQL server/restart integration run was not performed.
+
 ---
 
 ## 4. Data Model Schema (PostgreSQL)
@@ -352,4 +409,33 @@ CREATE TABLE crawl_jobs (
     started_at TIMESTAMP WITH TIME ZONE,
     finished_at TIMESTAMP WITH TIME ZONE
 );
+
+-- Anonymous browser identity and session-owned search history
+CREATE TABLE browser_sessions (
+    id VARCHAR(36) PRIMARY KEY,
+    token_hash VARCHAR(64) NOT NULL UNIQUE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE TABLE search_history (
+    id VARCHAR(36) PRIMARY KEY, -- client request UUID; write-idempotency key
+    owner_session_id VARCHAR(36) NOT NULL
+        REFERENCES browser_sessions(id) ON DELETE CASCADE,
+    query VARCHAR(500) NOT NULL,
+    mode VARCHAR(16) NOT NULL
+        CHECK (mode IN ('web', 'ai', 'research', 'code', 'live')),
+    status VARCHAR(16) NOT NULL DEFAULT 'completed'
+        CHECK (status = 'completed'),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX ix_search_history_owner_created_at
+    ON search_history (owner_session_id, created_at);
 ```
+
+`search_history` is created and upgraded by the Alembic revisions under
+`backend/db/migrations/versions/`; the `created_at`/`id` ordering is descending
+for stable chronological pagination. The application uses its configured
+`DATABASE_URL` (PostgreSQL in deployment); repository tests use temporary
+SQLite databases for hermetic coverage.
